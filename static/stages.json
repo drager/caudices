@@ -1,0 +1,60 @@
+[
+  {
+    "stage": 1,
+    "maps": [
+      {
+        "level": 1,
+        "time": 300000,
+        "blocks": [
+          {
+            "position": {
+              "x": 50,
+              "y": 50
+            },
+            "can_be_moved": false,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 50, "y": 100},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+					{
+            "position": {"x": 50, "y": 150},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+					{
+            "position": {"x": 50, "y": 200},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+					{
+            "position": {"x": 50, "y": 250},
+            "can_be_moved": true,
+            "color": "purple"
+          }
+        ]
+      },
+      {
+        "level": 2,
+        "time": 300000,
+        "blocks": [
+          {
+            "position": {
+              "x": 150,
+              "y": 150
+            },
+            "can_be_moved": false,
+            "color": "orange"
+          },
+          {
+            "position": {"x": 150, "y": 100},
+            "can_be_moved": true,
+            "color": "indigo"
+          }
+        ]
+      }
+    ]
+  }
+]

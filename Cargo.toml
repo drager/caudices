@@ -1,0 +1,18 @@
+[package]
+authors = ["Jesper Håkansson <jesper@jesperh.se>"]
+name = "caudices"
+version = "0.1.0"
+
+[dependencies]
+serde = "1.0.80"
+serde_derive = "1.0.80"
+serde_json = "1.0.32"
+time = "0.1.40"
+
+[dependencies.quicksilver]
+features = ["collisions"]
+version = "0.3.1"
+
+[dependencies.specs]
+default-features = false
+version = "0.12.3"
