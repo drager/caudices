@@ -111,7 +111,7 @@ impl State for Screen {
         let mali_font = Asset::new(Font::load("mali/Mali-Regular.ttf"));
 
         world.add_resource(DeltaTime(10.05));
-        world.add_resource(GameState::default);
+
         let mut dispatcher: Dispatcher = DispatcherBuilder::new()
             .with(StageCreator, "stage_creator", &[])
             .with(PhysicsSystem, "physics_system", &[])
@@ -119,29 +119,6 @@ impl State for Screen {
             .build();
 
         dispatcher.setup(&mut world.res);
-
-        //let _ = map::load_json_from_file("stages.json").execute(|json_file| {
-        //let stages = map::parse_json(&json_file).expect("Could not load the maps");
-        /*let stages = get_stages();*/
-        //println!("{:?}", stages);
-
-        //stages.into_iter().for_each(|stage| {
-        //stage.maps.into_iter().for_each(|map| {
-        //map.blocks_with_position
-        //.into_iter()
-        //.for_each(|block_with_position| {
-        //println!("Creating block: {:?}", block_with_position);
-        //world
-        //.create_entity()
-        //.with(block_with_position.block)
-        //.with(block_with_position.position)
-        //.build();
-        //});
-        //});
-        /*});*/
-
-        //Ok(())
-        //});
 
         dispatcher.dispatch(&world.res);
 
@@ -169,13 +146,14 @@ impl State for Screen {
         /*let blocks = self.world.read_storage::<Block>();*/
         let entities = self.world.entities();
         let stages = self.world.read_storage::<Stage>();
+        let game_state = self.world.read_resource::<GameState>();
 
         for entity in entities.join() {
             if let Some(stage) = stages.get(entity) {
                 stage
                     .maps
                     .iter()
-                    //.filter(|map| map.level == game_state.current_level)
+                    .filter(|map| map.level == game_state.current_level)
                     .for_each(|map| {
                         map.blocks_with_position
                             .iter()

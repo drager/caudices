@@ -4,8 +4,7 @@ use specs::{
     Component, Entities, HashMapStorage, Join, LazyUpdate, Read, ReadStorage, System, VecStorage,
     WriteStorage,
 };
-use stages;
-use utils::de_color;
+use utils::{self, de_color};
 use GameState;
 use Position;
 
@@ -86,15 +85,17 @@ impl<'a> System<'a> for StageCreator {
 
     fn run(&mut self, (entities, _stones, game_state, updater): Self::SystemData) {
         let new_stage = entities.create();
-        let stages = stages::get_stages();
-        println!("Stages: {:?}", stages);
+        let _ = utils::load_json_from_file("stages.json").execute(|json_file| {
+            let stages = parse_json(&json_file).expect("Could not load the maps");
+            stages
+                .into_iter()
+                .filter(|stage| stage.stage == game_state.current_stage)
+                .for_each(|stage| {
+                    updater.insert(new_stage, stage);
+                });
 
-        stages
-            .into_iter()
-            .filter(|stage| stage.stage == game_state.current_stage)
-            .for_each(|stage| {
-                updater.insert(new_stage, stage);
-            });
+            Ok(())
+        });
     }
 }
 
