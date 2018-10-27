@@ -18,7 +18,7 @@ pub mod map;
 mod stages;
 mod utils;
 
-use character::Character;
+use character::{Character, CharacterPosition};
 use log::log;
 use map::{BlockSystem, Stage, StageCreator};
 use quicksilver::{
@@ -118,9 +118,8 @@ impl Component for Velocity {
 pub struct Screen {
     world: World,
     time_elapsed: Duration,
-    mali_font: Asset<Font>,
-    character_animation: Animation,
     settings: Settings,
+    game_asset: GameAsset,
 }
 
 impl Screen {
@@ -260,15 +259,14 @@ impl Screen {
 
         GameAsset {
             mali_font,
-            character_animation,
+            character_animation: character_animation.expect("Couldn't get Character animation"),
         }
     }
 }
 
-#[derive(Debug)]
 struct GameAsset {
     mali_font: Asset<Font>,
-    character_animation: Option<Animation>,
+    character_animation: Animation,
 }
 
 #[derive(Debug)]
@@ -276,12 +274,6 @@ struct Settings {
     animation_positions: Vec<CharacterPosition>,
     mali_font_path: String,
     character_sprites_path: String,
-}
-
-#[derive(Debug)]
-enum CharacterPosition {
-    Start(Rectangle),
-    Moving(Rectangle),
 }
 
 impl State for Screen {
@@ -299,10 +291,7 @@ impl State for Screen {
             character_sprites_path: "character_sprites.png".to_owned(),
         };
 
-        let GameAsset {
-            mali_font,
-            character_animation,
-        } = Screen::load_assets(animation_positions, &settings);
+        let game_asset = Screen::load_assets(animation_positions, &settings);
 
         let mut world = World::new();
 
@@ -331,9 +320,8 @@ impl State for Screen {
         let screen = Screen {
             world,
             time_elapsed: Duration::new(0, 0),
-            mali_font,
-            character_animation: character_animation.expect("Couldn't get Character animation"),
             settings,
+            game_asset,
         };
 
         Ok(screen)
@@ -347,7 +335,7 @@ impl State for Screen {
         let mut positions = self.world.write_storage::<Position>();
         let entities = self.world.entities();
 
-        let character_animation = &mut self.character_animation;
+        let character_animation = &mut self.game_asset.character_animation;
         let animation_positions = &self.settings.animation_positions;
         let time_elapsed = self.time_elapsed;
 
@@ -409,8 +397,8 @@ impl State for Screen {
         let font_style = FontStyle::new(72.0, Color::WHITE);
 
         let time_elapsed = self.time_elapsed;
-        let mali_font = &mut self.mali_font;
-        let character_animation = &self.character_animation;
+        let mali_font = &mut self.game_asset.mali_font;
+        let character_animation = &self.game_asset.character_animation;
 
         entities.join().for_each(|entity| {
             if let Some(position) = positions.get(entity) {
