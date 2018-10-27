@@ -4,15 +4,22 @@ name = "caudices"
 version = "0.1.0"
 
 [dependencies]
+cfg-if = "0.1.6"
+console_error_panic_hook = "0.1.5"
 serde = "1.0.80"
 serde_derive = "1.0.80"
 serde_json = "1.0.32"
+stdweb = "0.4.10"
 time = "0.1.40"
+wasm-bindgen = "0.2.25"
 
 [dependencies.quicksilver]
 features = ["collisions"]
 version = "0.3.1"
 
+
 [dependencies.specs]
+branch = "disabable-perallel-feature"
 default-features = false
+git = "https://github.com/omni-viral/specs"
 version = "0.12.3"
