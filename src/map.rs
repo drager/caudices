@@ -1,3 +1,4 @@
+use log::log;
 use quicksilver::graphics::Color;
 use serde_json;
 use specs::{
@@ -85,8 +86,11 @@ impl<'a> System<'a> for StageCreator {
 
     fn run(&mut self, (entities, _stones, game_state, updater): Self::SystemData) {
         let new_stage = entities.create();
-        let _ = utils::load_json_from_file("stages.json").execute(|json_file| {
+        log("Running stage_creator");
+        let result = utils::load_json_from_file("stages.json").execute(|json_file| {
+            log(&format!("FILE: {:?}", json_file));
             let stages = parse_json(&json_file).expect("Could not load the maps");
+            log(&format!("{:?}", stages));
             stages
                 .into_iter()
                 .filter(|stage| stage.stage == game_state.current_stage)
@@ -96,6 +100,7 @@ impl<'a> System<'a> for StageCreator {
 
             Ok(())
         });
+        log(&format!("{:?}", result));
     }
 }
 
@@ -112,7 +117,7 @@ pub struct Stage {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Map {
     pub level: u16,
-    pub time: i64,
+    pub time: u64,
     #[serde(rename = "blocks")]
     pub blocks_with_position: Vec<BlockAndPosition>,
 }
