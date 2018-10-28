@@ -205,7 +205,7 @@ impl Screen {
         match key_state {
             ButtonState::Pressed | ButtonState::Held => {
                 position_changer(position);
-                log(&format!("{:?}", current_frame_area));
+                //log(&format!("{:?}", current_frame_area));
                 match current_frame_area {
                     Rectangle {
                         pos: Vector { x, .. },
@@ -257,9 +257,12 @@ impl Screen {
             Ok(())
         });
 
+        let block_asset = Asset::new(Image::load(settings.block_asset_path.to_owned()));
+
         GameAsset {
             mali_font,
             character_animation: character_animation.expect("Couldn't get Character animation"),
+            block_asset,
         }
     }
 }
@@ -267,6 +270,7 @@ impl Screen {
 struct GameAsset {
     mali_font: Asset<Font>,
     character_animation: Animation,
+    block_asset: Asset<Image>,
 }
 
 #[derive(Debug)]
@@ -274,6 +278,7 @@ struct Settings {
     animation_positions: Vec<CharacterPosition>,
     mali_font_path: String,
     character_sprites_path: String,
+    block_asset_path: String,
 }
 
 impl State for Screen {
@@ -289,6 +294,7 @@ impl State for Screen {
             ],
             mali_font_path: "mali/Mali-Regular.ttf".to_owned(),
             character_sprites_path: "character_sprites.png".to_owned(),
+            block_asset_path: "50x50.png".to_owned(),
         };
 
         let game_asset = Screen::load_assets(animation_positions, &settings);
@@ -352,34 +358,36 @@ impl State for Screen {
                     });
             };
 
-            if let Some(position) = positions.get_mut(entity) {
-                Screen::handle_right_key_for_character(
-                    window,
-                    position,
-                    character_animation,
-                    animation_positions,
-                );
+            if !game_state.game_over {
+                if let Some(position) = positions.get_mut(entity) {
+                    Screen::handle_right_key_for_character(
+                        window,
+                        position,
+                        character_animation,
+                        animation_positions,
+                    );
 
-                Screen::handle_left_key_for_character(
-                    window,
-                    position,
-                    character_animation,
-                    animation_positions,
-                );
+                    Screen::handle_left_key_for_character(
+                        window,
+                        position,
+                        character_animation,
+                        animation_positions,
+                    );
 
-                Screen::handle_down_key_for_character(
-                    window,
-                    position,
-                    character_animation,
-                    animation_positions,
-                );
+                    Screen::handle_down_key_for_character(
+                        window,
+                        position,
+                        character_animation,
+                        animation_positions,
+                    );
 
-                Screen::handle_up_key_for_character(
-                    window,
-                    position,
-                    character_animation,
-                    animation_positions,
-                );
+                    Screen::handle_up_key_for_character(
+                        window,
+                        position,
+                        character_animation,
+                        animation_positions,
+                    );
+                }
             }
         });
 
@@ -399,47 +407,66 @@ impl State for Screen {
         let time_elapsed = self.time_elapsed;
         let mali_font = &mut self.game_asset.mali_font;
         let character_animation = &self.game_asset.character_animation;
+        let block_asset = &mut self.game_asset.block_asset;
 
-        entities.join().for_each(|entity| {
-            if let Some(position) = positions.get(entity) {
-                let current_frame = character_animation.current_frame();
-                window.draw(
-                    &current_frame.area().with_center(position.position),
-                    Img(&current_frame),
-                );
-            }
-            if let Some(stage) = stages.get(entity) {
+        let current_frame = character_animation.current_frame();
+
+        entities
+            .join()
+            .map(|entity| {
                 if !game_state.game_over {
-                    stage
-                        .maps
-                        .iter()
-                        .find(|map| map.level == game_state.current_level)
-                        .map(|map| {
-                            let _ = mali_font.execute(|font| {
-                                let _ = font
-                                    .render(
-                                        &format!("{}", map.time / 1000 - time_elapsed.as_secs()),
-                                        &font_style,
-                                    ).map(|text| {
-                                        window.draw(&text.area().with_center((70, 50)), Img(&text));
+                    if let Some(position) = positions.get(entity) {
+                        window.draw(
+                            &current_frame.area().with_center(position.position),
+                            Img(&current_frame),
+                        );
+                    }
+                    if let Some(stage) = stages.get(entity) {
+                        let _ = stage
+                            .maps
+                            .iter()
+                            .find(|map| map.level == game_state.current_level)
+                            .map(|map| {
+                                let map_time = map.time / 1000;
+                                let time_elapsed_as_secs = time_elapsed.as_secs();
+
+                                if time_elapsed_as_secs <= map_time {
+                                    let _ = mali_font.execute(|font| {
+                                        let _ = font
+                                            .render(
+                                                &format!("{}", map_time - time_elapsed_as_secs),
+                                                &font_style,
+                                            ).map(|text| {
+                                                window.draw(
+                                                    &text.area().with_center((70, 50)),
+                                                    Img(&text),
+                                                );
+                                            });
+                                        Ok(())
                                     });
-                                Ok(())
-                            });
-                            map.blocks_with_position
+                                }
+                                map.blocks_with_position
                                 .iter()
-                                .for_each(|block_with_position| {
+                                .map(|block_with_position| {
                                     let block = &block_with_position.block;
                                     let position = block_with_position.position.position;
 
-                                    window.draw(
-                                        &Rectangle::new(
-                                            position,
-                                            (block.size.width, block.size.height),
-                                        ),
-                                        Background::Col(block.color),
-                                    );
-                                });
-                        });
+                                    block_asset.execute(|image| {
+                                        window
+                                            .draw(&image.area().with_center(position), Img(&image));
+                                        Ok(())
+                                    })
+
+                                    /*window.draw(*/
+                                    //&Rectangle::new(
+                                    //position,
+                                    //(block.size.width, block.size.height),
+                                    //),
+                                    //Background::Col(block.color),
+                                    /*);*/
+                                }).collect::<Vec<Result<_>>>()
+                            });
+                    }
                 } else {
                     let _ = mali_font.execute(|font| {
                         let _ = font.render("Game over", &font_style).map(|text| {
@@ -454,10 +481,9 @@ impl State for Screen {
                         Ok(())
                     });
                 }
-            };
-        });
 
-        Ok(())
+                Ok(())
+            }).collect()
     }
 }
 
