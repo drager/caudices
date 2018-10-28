@@ -20,7 +20,7 @@ mod utils;
 
 use character::{Character, CharacterPosition};
 use log::log;
-use map::{BlockSystem, Stage, StageCreator};
+use map::{BlockSystem, Map, Stage, StageCreator};
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{
@@ -123,6 +123,68 @@ pub struct Screen {
 }
 
 impl Screen {
+    fn draw_character(
+        window: &mut Window,
+        position: &Position,
+        character_animation: &Animation,
+    ) -> Result<()> {
+        let current_frame = character_animation.current_frame();
+        window.draw(
+            &current_frame.area().with_center(position.position),
+            Img(&current_frame),
+        );
+        Ok(())
+    }
+
+    fn draw_time_left(
+        window: &mut Window,
+        time_elapsed: &Duration,
+        map: &Map,
+        asset_font: &mut Asset<Font>,
+    ) -> Result<()> {
+        let font_style = FontStyle::new(72.0, Color::WHITE);
+        let map_time = map.time / 1000;
+        let time_elapsed_as_secs = time_elapsed.as_secs();
+
+        if time_elapsed_as_secs <= map_time {
+            asset_font.execute(|font| {
+                let _ = font
+                    .render(&format!("{}", map_time - time_elapsed_as_secs), &font_style)
+                    .map(|text| {
+                        window.draw(&text.area().with_center((70, 50)), Img(&text));
+                    });
+                Ok(())
+            })
+        } else {
+            Ok(())
+        }
+    }
+
+    fn draw_blocks(
+        window: &mut Window,
+        map: &Map,
+        block_asset: &mut Asset<Image>,
+    ) -> Vec<Result<()>> {
+        map.blocks_with_position
+            .iter()
+            .map(|block_with_position| {
+                let block = &block_with_position.block;
+                let position = block_with_position.position.position;
+
+                block_asset.execute(|image| {
+                    window.draw(&image.area().with_center(position), Img(&image));
+                    Ok(())
+                })
+
+                /*window.draw(*/
+                //&Rectangle::new(
+                //position,
+                //(block.size.width, block.size.height),
+                //),
+                //Background::Col(block.color),
+                /*);*/            }).collect::<Vec<Result<_>>>()
+    }
+
     fn handle_right_key_for_character(
         window: &mut Window,
         position: &mut Position,
@@ -409,63 +471,23 @@ impl State for Screen {
         let character_animation = &self.game_asset.character_animation;
         let block_asset = &mut self.game_asset.block_asset;
 
-        let current_frame = character_animation.current_frame();
-
         entities
             .join()
             .map(|entity| {
                 if !game_state.game_over {
                     if let Some(position) = positions.get(entity) {
-                        window.draw(
-                            &current_frame.area().with_center(position.position),
-                            Img(&current_frame),
-                        );
+                        Screen::draw_character(window, position, character_animation);
                     }
                     if let Some(stage) = stages.get(entity) {
-                        let _ = stage
+                        stage
                             .maps
                             .iter()
                             .find(|map| map.level == game_state.current_level)
                             .map(|map| {
-                                let map_time = map.time / 1000;
-                                let time_elapsed_as_secs = time_elapsed.as_secs();
+                                Screen::draw_time_left(window, &time_elapsed, map, mali_font);
 
-                                if time_elapsed_as_secs <= map_time {
-                                    let _ = mali_font.execute(|font| {
-                                        let _ = font
-                                            .render(
-                                                &format!("{}", map_time - time_elapsed_as_secs),
-                                                &font_style,
-                                            ).map(|text| {
-                                                window.draw(
-                                                    &text.area().with_center((70, 50)),
-                                                    Img(&text),
-                                                );
-                                            });
-                                        Ok(())
-                                    });
-                                }
-                                map.blocks_with_position
-                                .iter()
-                                .map(|block_with_position| {
-                                    let block = &block_with_position.block;
-                                    let position = block_with_position.position.position;
-
-                                    block_asset.execute(|image| {
-                                        window
-                                            .draw(&image.area().with_center(position), Img(&image));
-                                        Ok(())
-                                    })
-
-                                    /*window.draw(*/
-                                    //&Rectangle::new(
-                                    //position,
-                                    //(block.size.width, block.size.height),
-                                    //),
-                                    //Background::Col(block.color),
-                                    /*);*/
-                                }).collect::<Vec<Result<_>>>()
-                            });
+                                Screen::draw_blocks(window, map, block_asset);
+                            }).ok_or(quicksilver::Error::ContextError("Fail!".to_owned()));
                     }
                 } else {
                     let _ = mali_font.execute(|font| {
