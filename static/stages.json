@@ -4,33 +4,25 @@
     "maps": [
       {
         "level": 1,
-        "time": 300000,
+        "time": 30000,
         "blocks": [
           {
-            "position": {
-              "x": 50,
-              "y": 50
-            },
-            "can_be_moved": false,
-            "color": "purple"
-          },
-          {
-            "position": {"x": 50, "y": 100},
-            "can_be_moved": true,
-            "color": "purple"
-          },
-					{
-            "position": {"x": 50, "y": 150},
-            "can_be_moved": true,
-            "color": "purple"
-          },
-					{
             "position": {"x": 50, "y": 200},
             "can_be_moved": true,
             "color": "purple"
           },
 					{
             "position": {"x": 50, "y": 250},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+					{
+            "position": {"x": 50, "y": 300},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+					{
+            "position": {"x": 50, "y": 350},
             "can_be_moved": true,
             "color": "purple"
           }
