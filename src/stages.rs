@@ -2,6 +2,7 @@ use map::{Block, BlockAndPosition, Map, Size, Stage};
 use quicksilver::{geom::Vector, graphics::Color};
 use Position;
 
+#[allow(dead_code)]
 pub fn get_stages() -> Vec<Stage> {
     vec![
         Stage {
