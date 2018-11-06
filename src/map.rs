@@ -6,8 +6,8 @@ use specs::{
     WriteStorage,
 };
 use utils::{self, de_color};
-use GameState;
 use Position;
+use {GameState, ScreenState};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Size {
@@ -80,11 +80,11 @@ impl<'a> System<'a> for StageCreator {
     type SystemData = (
         Entities<'a>,
         WriteStorage<'a, Stage>,
-        Read<'a, GameState>,
+        Read<'a, ScreenState>,
         Read<'a, LazyUpdate>,
     );
 
-    fn run(&mut self, (entities, _stones, game_state, updater): Self::SystemData) {
+    fn run(&mut self, (entities, _stones, screen_state, updater): Self::SystemData) {
         let new_stage = entities.create();
         log("Running stage_creator");
         let result = utils::load_json_from_file("stages.json").execute(|json_file| {
@@ -93,7 +93,7 @@ impl<'a> System<'a> for StageCreator {
             log(&format!("{:?}", stages));
             stages
                 .into_iter()
-                .filter(|stage| stage.stage == game_state.current_stage)
+                .filter(|stage| stage.stage == screen_state.current_stage)
                 .for_each(|stage| {
                     updater.insert(new_stage, stage);
                 });

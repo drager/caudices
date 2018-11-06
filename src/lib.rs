@@ -42,23 +42,36 @@ const WINDOW_WIDTH: u16 = 800;
 const WINDOW_HEIGHT: u16 = 600;
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct GameState {
-    pub current_stage: u16,
-    pub current_level: u16,
-    pub game_over: bool,
+pub enum GameState {
+    Active,
+    Paused,
+    Over,
 }
 
 impl Default for GameState {
     fn default() -> Self {
-        GameState {
+        GameState::Active
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ScreenState {
+    pub current_stage: u16,
+    pub current_level: u16,
+    pub game_state: GameState,
+}
+
+impl Default for ScreenState {
+    fn default() -> Self {
+        ScreenState {
             current_stage: 1,
             current_level: 1,
-            game_over: false,
+            game_state: GameState::Active,
         }
     }
 }
 
-impl Component for GameState {
+impl Component for ScreenState {
     type Storage = VecStorage<Self>;
 }
 
@@ -277,7 +290,7 @@ impl Screen {
                             if x == rectangle.pos.x {
                                 character_animation.tick();
 
-                                log("Animation ticking...");
+                                //log("Animation ticking...");
                             }
                         }
                     },
@@ -292,7 +305,7 @@ impl Screen {
                         if x == rectangle.pos.x {
                             character_animation.tick();
 
-                            log("Animation ticking for moving...");
+                            //log("Animation ticking for moving...");
                         }
                     }
                 },
@@ -398,7 +411,7 @@ impl State for Screen {
     fn update(&mut self, window: &mut Window) -> Result<()> {
         self.time_elapsed += Duration::from_millis(10);
 
-        let mut game_state = self.world.write_resource::<GameState>();
+        let mut screen_state = self.world.write_resource::<ScreenState>();
         let stages = self.world.read_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
         let entities = self.world.entities();
@@ -412,44 +425,47 @@ impl State for Screen {
                 stage
                     .maps
                     .iter()
-                    .find(|map| map.level == game_state.current_level)
+                    .find(|map| map.level == screen_state.current_level)
                     .map(|map| {
                         if time_elapsed.as_secs() >= map.time / 1000 {
-                            game_state.game_over = true;
+                            screen_state.game_state = GameState::Over;
                         }
                     });
             };
 
-            if !game_state.game_over {
-                if let Some(position) = positions.get_mut(entity) {
-                    Screen::handle_right_key_for_character(
-                        window,
-                        position,
-                        character_animation,
-                        animation_positions,
-                    );
+            match screen_state.game_state {
+                GameState::Active => {
+                    if let Some(position) = positions.get_mut(entity) {
+                        Screen::handle_right_key_for_character(
+                            window,
+                            position,
+                            character_animation,
+                            animation_positions,
+                        );
 
-                    Screen::handle_left_key_for_character(
-                        window,
-                        position,
-                        character_animation,
-                        animation_positions,
-                    );
+                        Screen::handle_left_key_for_character(
+                            window,
+                            position,
+                            character_animation,
+                            animation_positions,
+                        );
 
-                    Screen::handle_down_key_for_character(
-                        window,
-                        position,
-                        character_animation,
-                        animation_positions,
-                    );
+                        Screen::handle_down_key_for_character(
+                            window,
+                            position,
+                            character_animation,
+                            animation_positions,
+                        );
 
-                    Screen::handle_up_key_for_character(
-                        window,
-                        position,
-                        character_animation,
-                        animation_positions,
-                    );
+                        Screen::handle_up_key_for_character(
+                            window,
+                            position,
+                            character_animation,
+                            animation_positions,
+                        );
+                    }
                 }
+                _ => {}
             }
         });
 
@@ -461,7 +477,7 @@ impl State for Screen {
 
         let entities = self.world.entities();
         let stages = self.world.read_storage::<Stage>();
-        let game_state = self.world.read_resource::<GameState>();
+        let screen_state = self.world.read_resource::<ScreenState>();
         let positions = self.world.read_storage::<Position>();
 
         let font_style = FontStyle::new(72.0, Color::WHITE);
@@ -474,36 +490,52 @@ impl State for Screen {
         entities
             .join()
             .map(|entity| {
-                if !game_state.game_over {
-                    if let Some(position) = positions.get(entity) {
-                        Screen::draw_character(window, position, character_animation);
-                    }
-                    if let Some(stage) = stages.get(entity) {
-                        stage
-                            .maps
-                            .iter()
-                            .find(|map| map.level == game_state.current_level)
-                            .map(|map| {
-                                Screen::draw_time_left(window, &time_elapsed, map, mali_font);
+                match screen_state.game_state {
+                    GameState::Active => {
+                        if let Some(position) = positions.get(entity) {
+                            Screen::draw_character(window, position, character_animation);
+                        }
+                        if let Some(stage) = stages.get(entity) {
+                            stage
+                                .maps
+                                .iter()
+                                .find(|map| map.level == screen_state.current_level)
+                                .map(|map| {
+                                    Screen::draw_time_left(window, &time_elapsed, map, mali_font);
 
-                                Screen::draw_blocks(window, map, block_asset);
-                            }).ok_or(quicksilver::Error::ContextError("Fail!".to_owned()));
+                                    Screen::draw_blocks(window, map, block_asset);
+                                }).ok_or(quicksilver::Error::ContextError("Fail!".to_owned()));
+                        }
                     }
-                } else {
-                    let _ = mali_font.execute(|font| {
-                        let _ = font.render("Game over", &font_style).map(|text| {
-                            window.draw(
-                                &text
-                                    .area()
-                                    .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
-                                Img(&text),
-                            );
+                    GameState::Over => {
+                        let _ = mali_font.execute(|font| {
+                            let _ = font.render("Game over", &font_style).map(|text| {
+                                window.draw(
+                                    &text
+                                        .area()
+                                        .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
+                                    Img(&text),
+                                );
+                            });
+
+                            Ok(())
                         });
+                    }
+                    GameState::Paused => {
+                        let _ = mali_font.execute(|font| {
+                            let _ = font.render("Paused", &font_style).map(|text| {
+                                window.draw(
+                                    &text
+                                        .area()
+                                        .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
+                                    Img(&text),
+                                );
+                            });
 
-                        Ok(())
-                    });
+                            Ok(())
+                        });
+                    }
                 }
-
                 Ok(())
             }).collect()
     }
