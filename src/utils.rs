@@ -1,4 +1,4 @@
-use quicksilver::{graphics::Color, lifecycle::Asset, load_file};
+use quicksilver::graphics::Color;
 use serde::de::{self, Deserialize, Deserializer, Unexpected};
 
 pub fn de_color<'de, D>(deserializer: D) -> Result<Color, D::Error>
@@ -19,8 +19,4 @@ where
             &"0",
         )),
     }
-}
-
-pub fn load_json_from_file(filename: &'static str) -> Asset<Vec<u8>> {
-    Asset::new(load_file(filename))
 }

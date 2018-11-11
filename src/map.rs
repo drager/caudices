@@ -1,15 +1,15 @@
-use log::log;
 use quicksilver::graphics::Color;
 use serde_json;
+use specs::prelude::Resources;
 use specs::{
     Component, Entities, HashMapStorage, Join, LazyUpdate, Read, ReadStorage, System, VecStorage,
     WriteStorage,
 };
-use utils::{self, de_color};
+use utils::de_color;
 use Position;
-use {GameState, ScreenState};
+use ScreenState;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Size {
     pub width: f32,
     pub height: f32,
@@ -24,7 +24,7 @@ impl Default for Size {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Block {
     pub can_be_moved: bool,
     #[serde(default)]
@@ -65,7 +65,7 @@ impl<'a> System<'a> for BlockSystem {
         (&entities, &mut blocks, &positions)
             .join()
             .for_each(|(_entity, _blocks, _position)| {
-                let _block = entities.create();
+                //let _block = entities.create();
             });
     }
 }
@@ -84,37 +84,25 @@ impl<'a> System<'a> for StageCreator {
         Read<'a, LazyUpdate>,
     );
 
-    fn run(&mut self, (entities, _stones, screen_state, updater): Self::SystemData) {
-        let new_stage = entities.create();
-        log("Running stage_creator");
-        let result = utils::load_json_from_file("stages.json").execute(|json_file| {
-            log(&format!("FILE: {:?}", json_file));
-            let stages = parse_json(&json_file).expect("Could not load the maps");
-            log(&format!("{:?}", stages));
-            stages
-                .into_iter()
-                .filter(|stage| stage.stage == screen_state.current_stage)
-                .for_each(|stage| {
-                    updater.insert(new_stage, stage);
-                });
-
-            Ok(())
-        });
-        log(&format!("{:?}", result));
+    fn setup(&mut self, res: &mut Resources) {
+        use specs::prelude::SystemData;
+        Self::SystemData::setup(res);
     }
+
+    fn run(&mut self, (_entities, _stones, _screen_state, _updater): Self::SystemData) {}
 }
 
 pub fn parse_json(json_slice: &[u8]) -> Result<Vec<Stage>, serde_json::error::Error> {
     serde_json::from_slice::<Vec<Stage>>(json_slice)
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct Stage {
     pub stage: u16,
     pub maps: Vec<Map>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Map {
     pub level: u16,
     pub time: u64,
@@ -122,7 +110,7 @@ pub struct Map {
     pub blocks_with_position: Vec<BlockAndPosition>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct BlockAndPosition {
     #[serde(flatten)]
     pub block: Block,

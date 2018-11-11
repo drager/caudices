@@ -6,6 +6,7 @@ extern crate cfg_if;
 extern crate quicksilver;
 #[macro_use]
 extern crate serde_derive;
+extern crate futures;
 extern crate specs;
 extern crate time;
 
@@ -19,18 +20,15 @@ mod stages;
 mod utils;
 
 use character::{Character, CharacterPosition};
+use futures::future;
 use log::log;
 use map::{BlockSystem, Map, Stage, StageCreator};
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
-    graphics::{
-        Animation,
-        Background::{self, Img},
-        Color, Font, FontStyle, Image,
-    },
+    graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
     input::{ButtonState, Key},
     lifecycle::{run, Asset, Settings as QuickSilverSettings, State, Window},
-    Result,
+    load_file, Future, Result,
 };
 use specs::{
     Builder, Component, Dispatcher, DispatcherBuilder, Join, Read, ReadStorage, System, VecStorage,
@@ -101,7 +99,7 @@ impl<'a> System<'a> for PhysicsSystem {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Position {
     position: Vector,
 }
@@ -181,21 +179,13 @@ impl Screen {
         map.blocks_with_position
             .iter()
             .map(|block_with_position| {
-                let block = &block_with_position.block;
                 let position = block_with_position.position.position;
 
                 block_asset.execute(|image| {
                     window.draw(&image.area().with_center(position), Img(&image));
                     Ok(())
                 })
-
-                /*window.draw(*/
-                //&Rectangle::new(
-                //position,
-                //(block.size.width, block.size.height),
-                //),
-                //Background::Col(block.color),
-                /*);*/            }).collect::<Vec<Result<_>>>()
+            }).collect::<Vec<Result<_>>>()
     }
 
     fn handle_right_key_for_character(
@@ -314,38 +304,43 @@ impl Screen {
         }
     }
 
-    fn load_assets(animation_positions: Vec<Rectangle>, settings: &Settings) -> GameAsset {
+    fn load_assets(animation_positions: Vec<Rectangle>, settings: &Settings) -> Result<GameAsset> {
         let frame_delay = 1;
-        let mut character_animation = None;
 
         let mali_font = Asset::new(Font::load(settings.mali_font_path.to_owned()));
-        let mut character_sprites =
-            Asset::new(Image::load(settings.character_sprites_path.to_owned()));
-
-        let _ = character_sprites.execute(|character_image| {
-            let animation = Animation::from_spritesheet(
+        let character_image = Image::load("character_sprites.png").map(move |character_image| {
+            Animation::from_spritesheet(
                 character_image.to_owned(),
                 animation_positions,
                 frame_delay,
-            );
-            character_animation = Some(animation);
-            Ok(())
+            )
         });
 
-        let block_asset = Asset::new(Image::load(settings.block_asset_path.to_owned()));
+        let character_asset = Asset::new(character_image);
 
-        GameAsset {
+        let block_asset = Asset::new(Image::load(settings.block_asset_path.to_owned()));
+        let stages_file = load_file("stages.json").and_then(move |stages_bytes| {
+            let stages = map::parse_json(&stages_bytes);
+            future::result(stages.map_err(|_err| {
+                quicksilver::Error::ContextError("Couldn't parse json.".to_owned())
+            }))
+        });
+        let stages_asset = Asset::new(stages_file);
+
+        Ok(GameAsset {
             mali_font,
-            character_animation: character_animation.expect("Couldn't get Character animation"),
+            character_asset,
+            stages: stages_asset,
             block_asset,
-        }
+        })
     }
 }
 
 struct GameAsset {
     mali_font: Asset<Font>,
-    character_animation: Animation,
+    character_asset: Asset<Animation>,
     block_asset: Asset<Image>,
+    stages: Asset<Vec<Stage>>,
 }
 
 #[derive(Debug)]
@@ -354,6 +349,18 @@ struct Settings {
     mali_font_path: String,
     character_sprites_path: String,
     block_asset_path: String,
+}
+
+fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
+    stages
+        .into_iter()
+        .find(|stage| stage.stage == state.current_stage)
+        .and_then(|stage| {
+            stage
+                .maps
+                .into_iter()
+                .find(|map| map.level == state.current_level)
+        })
 }
 
 impl State for Screen {
@@ -372,7 +379,7 @@ impl State for Screen {
             block_asset_path: "50x50.png".to_owned(),
         };
 
-        let game_asset = Screen::load_assets(animation_positions, &settings);
+        let game_asset = Screen::load_assets(animation_positions, &settings)?;
 
         let mut world = World::new();
 
@@ -412,15 +419,25 @@ impl State for Screen {
         self.time_elapsed += Duration::from_millis(10);
 
         let mut screen_state = self.world.write_resource::<ScreenState>();
-        let stages = self.world.read_storage::<Stage>();
+        let mut stages = self.world.write_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
         let entities = self.world.entities();
 
-        let character_animation = &mut self.game_asset.character_animation;
+        let character_asset = &mut self.game_asset.character_asset;
         let animation_positions = &self.settings.animation_positions;
         let time_elapsed = self.time_elapsed;
+        let stages_asset = &mut self.game_asset.stages;
 
-        entities.join().for_each(move |entity| {
+        entities.join().for_each(|entity| {
+            let _ = stages_asset.execute(|fetched_stages| {
+                fetched_stages.iter().for_each(|stage| {
+                    let _ = stages.insert(entity, stage.to_owned());
+                });
+                Ok(())
+            });
+        });
+
+        entities.join().for_each(|entity| {
             if let Some(stage) = stages.get(entity) {
                 stage
                     .maps
@@ -431,38 +448,42 @@ impl State for Screen {
                             screen_state.game_state = GameState::Over;
                         }
                     });
-            };
+            }
 
             match screen_state.game_state {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
-                        Screen::handle_right_key_for_character(
-                            window,
-                            position,
-                            character_animation,
-                            animation_positions,
-                        );
+                        let _ = character_asset.execute(|character_animation| {
+                            Screen::handle_right_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            );
 
-                        Screen::handle_left_key_for_character(
-                            window,
-                            position,
-                            character_animation,
-                            animation_positions,
-                        );
+                            Screen::handle_left_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            );
 
-                        Screen::handle_down_key_for_character(
-                            window,
-                            position,
-                            character_animation,
-                            animation_positions,
-                        );
+                            Screen::handle_down_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            );
 
-                        Screen::handle_up_key_for_character(
-                            window,
-                            position,
-                            character_animation,
-                            animation_positions,
-                        );
+                            Screen::handle_up_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            );
+
+                            Ok(())
+                        });
                     }
                 }
                 _ => {}
@@ -476,67 +497,79 @@ impl State for Screen {
         window.clear(Color::BLACK)?;
 
         let entities = self.world.entities();
-        let stages = self.world.read_storage::<Stage>();
         let screen_state = self.world.read_resource::<ScreenState>();
         let positions = self.world.read_storage::<Position>();
+        let stages = self.world.read_storage::<Stage>();
 
         let font_style = FontStyle::new(72.0, Color::WHITE);
 
         let time_elapsed = self.time_elapsed;
         let mali_font = &mut self.game_asset.mali_font;
-        let character_animation = &self.game_asset.character_animation;
         let block_asset = &mut self.game_asset.block_asset;
+        let character_asset = &mut self.game_asset.character_asset;
+
+        let mut active_rendering = |entity: specs::Entity,
+                                    window: &mut Window,
+                                    block_asset: &mut Asset<Image>,
+                                    mali_font: &mut Asset<Font>|
+         -> Result<()> {
+            if let Some(position) = positions.get(entity) {
+                character_asset.execute(|character_image| {
+                    Screen::draw_character(window, position, character_image)?;
+                    Ok(())
+                })?;
+            }
+
+            let current_map = stages.get(entity).and_then(|stage| {
+                stage
+                    .maps
+                    .iter()
+                    .find(|map| map.level == screen_state.current_level)
+            });
+
+            match current_map {
+                Some(map) => {
+                    Screen::draw_time_left(window, &time_elapsed, map, mali_font)?;
+
+                    Screen::draw_blocks(window, map, block_asset);
+                }
+                None => {}
+            };
+
+            Ok(())
+        };
 
         entities
             .join()
-            .map(|entity| {
-                match screen_state.game_state {
-                    GameState::Active => {
-                        if let Some(position) = positions.get(entity) {
-                            Screen::draw_character(window, position, character_animation);
-                        }
-                        if let Some(stage) = stages.get(entity) {
-                            stage
-                                .maps
-                                .iter()
-                                .find(|map| map.level == screen_state.current_level)
-                                .map(|map| {
-                                    Screen::draw_time_left(window, &time_elapsed, map, mali_font);
-
-                                    Screen::draw_blocks(window, map, block_asset);
-                                }).ok_or(quicksilver::Error::ContextError("Fail!".to_owned()));
-                        }
-                    }
-                    GameState::Over => {
-                        let _ = mali_font.execute(|font| {
-                            let _ = font.render("Game over", &font_style).map(|text| {
-                                window.draw(
-                                    &text
-                                        .area()
-                                        .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
-                                    Img(&text),
-                                );
-                            });
-
-                            Ok(())
+            .map(|entity| match screen_state.game_state {
+                GameState::Active => active_rendering(entity, window, block_asset, mali_font),
+                GameState::Over => {
+                    active_rendering(entity, window, block_asset, mali_font)?;
+                    mali_font.execute(|font| {
+                        let _ = font.render("Game over", &font_style).map(|text| {
+                            window.draw(
+                                &text
+                                    .area()
+                                    .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
+                                Img(&text),
+                            );
                         });
-                    }
-                    GameState::Paused => {
-                        let _ = mali_font.execute(|font| {
-                            let _ = font.render("Paused", &font_style).map(|text| {
-                                window.draw(
-                                    &text
-                                        .area()
-                                        .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
-                                    Img(&text),
-                                );
-                            });
 
-                            Ok(())
-                        });
-                    }
+                        Ok(())
+                    })
                 }
-                Ok(())
+                GameState::Paused => mali_font.execute(|font| {
+                    let _ = font.render("Paused", &font_style).map(|text| {
+                        window.draw(
+                            &text
+                                .area()
+                                .with_center((WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2)),
+                            Img(&text),
+                        );
+                    });
+
+                    Ok(())
+                }),
             }).collect()
     }
 }
