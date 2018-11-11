@@ -308,23 +308,28 @@ impl Screen {
         let frame_delay = 1;
 
         let mali_font = Asset::new(Font::load(settings.mali_font_path.to_owned()));
-        let character_image = Image::load("character_sprites.png").map(move |character_image| {
-            Animation::from_spritesheet(
-                character_image.to_owned(),
-                animation_positions,
-                frame_delay,
-            )
-        });
+
+        let character_image =
+            Image::load(settings.character_sprites_path.to_owned()).map(move |character_image| {
+                Animation::from_spritesheet(
+                    character_image.to_owned(),
+                    animation_positions,
+                    frame_delay,
+                )
+            });
 
         let character_asset = Asset::new(character_image);
 
         let block_asset = Asset::new(Image::load(settings.block_asset_path.to_owned()));
-        let stages_file = load_file("stages.json").and_then(move |stages_bytes| {
-            let stages = map::parse_json(&stages_bytes);
-            future::result(stages.map_err(|_err| {
-                quicksilver::Error::ContextError("Couldn't parse json.".to_owned())
-            }))
-        });
+
+        let stages_file =
+            load_file(settings.stages_json_path.to_owned()).and_then(move |stages_bytes| {
+                let stages = map::parse_json(&stages_bytes);
+                future::result(stages.map_err(|_err| {
+                    quicksilver::Error::ContextError("Couldn't parse json.".to_owned())
+                }))
+            });
+
         let stages_asset = Asset::new(stages_file);
 
         Ok(GameAsset {
@@ -349,6 +354,7 @@ struct Settings {
     mali_font_path: String,
     character_sprites_path: String,
     block_asset_path: String,
+    stages_json_path: String,
 }
 
 fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
@@ -377,6 +383,7 @@ impl State for Screen {
             mali_font_path: "mali/Mali-Regular.ttf".to_owned(),
             character_sprites_path: "character_sprites.png".to_owned(),
             block_asset_path: "50x50.png".to_owned(),
+            stages_json_path: "stages.json".to_owned(),
         };
 
         let game_asset = Screen::load_assets(animation_positions, &settings)?;
