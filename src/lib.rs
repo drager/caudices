@@ -22,7 +22,7 @@ mod utils;
 use character::{Character, CharacterPosition};
 use futures::future;
 use log::log;
-use map::{BlockSystem, Map, Stage, StageCreator};
+use map::{Block, BlockSystem, Map, Stage, StageCreator};
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
@@ -410,6 +410,43 @@ impl State for Screen {
             .with(Character::default())
             .build();
 
+        let header_height = 100.;
+
+        for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
+            // The top.
+            world
+                .create_entity()
+                .with(Block::default())
+                .with(Position::new((width_index + 1) as f32 * 50., header_height))
+                .build();
+            // The bottom.
+            world
+                .create_entity()
+                .with(Block::default())
+                .with(Position::new(
+                    (width_index + 1) as f32 * 50.,
+                    (WINDOW_HEIGHT as u16 - 50).into(),
+                )).build();
+        }
+
+        for height_index in 2..=(WINDOW_HEIGHT / 50) - 2 {
+            // Left side.
+            world
+                .create_entity()
+                .with(Block::default())
+                .with(Position::new(50., (height_index + 1) as f32 * 50.))
+                .build();
+
+            // Right side
+            world
+                .create_entity()
+                .with(Block::default())
+                .with(Position::new(
+                    (WINDOW_WIDTH as u16 - 50).into(),
+                    (height_index + 1) as f32 * 50.,
+                )).build();
+        }
+
         world.maintain();
 
         let screen = Screen {
@@ -426,6 +463,7 @@ impl State for Screen {
         self.time_elapsed += Duration::from_millis(10);
 
         let mut screen_state = self.world.write_resource::<ScreenState>();
+        let characters = self.world.read_storage::<Character>();
         let mut stages = self.world.write_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
         let entities = self.world.entities();
@@ -460,37 +498,39 @@ impl State for Screen {
             match screen_state.game_state {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
-                        let _ = character_asset.execute(|character_animation| {
-                            Screen::handle_right_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            );
+                        if let Some(character) = characters.get(entity) {
+                            let _ = character_asset.execute(|character_animation| {
+                                Screen::handle_right_key_for_character(
+                                    window,
+                                    position,
+                                    character_animation,
+                                    animation_positions,
+                                );
 
-                            Screen::handle_left_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            );
+                                Screen::handle_left_key_for_character(
+                                    window,
+                                    position,
+                                    character_animation,
+                                    animation_positions,
+                                );
 
-                            Screen::handle_down_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            );
+                                Screen::handle_down_key_for_character(
+                                    window,
+                                    position,
+                                    character_animation,
+                                    animation_positions,
+                                );
 
-                            Screen::handle_up_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            );
+                                Screen::handle_up_key_for_character(
+                                    window,
+                                    position,
+                                    character_animation,
+                                    animation_positions,
+                                );
 
-                            Ok(())
-                        });
+                                Ok(())
+                            });
+                        }
                     }
                 }
                 _ => {}
@@ -504,9 +544,11 @@ impl State for Screen {
         window.clear(Color::BLACK)?;
 
         let entities = self.world.entities();
+        let characters = self.world.read_storage::<Character>();
         let screen_state = self.world.read_resource::<ScreenState>();
         let positions = self.world.read_storage::<Position>();
         let stages = self.world.read_storage::<Stage>();
+        let blocks = self.world.read_storage::<Block>();
 
         let font_style = FontStyle::new(72.0, Color::WHITE);
 
@@ -521,11 +563,22 @@ impl State for Screen {
                                     mali_font: &mut Asset<Font>|
          -> Result<()> {
             if let Some(position) = positions.get(entity) {
-                character_asset.execute(|character_image| {
-                    Screen::draw_character(window, position, character_image)?;
-                    Ok(())
-                })?;
+                if let Some(character) = characters.get(entity) {
+                    character_asset.execute(|character_image| {
+                        Screen::draw_character(window, position, character_image)?;
+                        Ok(())
+                    })?;
+                }
             }
+
+            positions.get(entity).and_then(|position| {
+                blocks.get(entity).map(|block| {
+                    block_asset.execute(|image| {
+                        window.draw(&image.area().with_center(position.position), Img(&image));
+                        Ok(())
+                    })
+                })
+            });
 
             let current_map = stages.get(entity).and_then(|stage| {
                 stage
