@@ -7,22 +7,298 @@
         "time": 30000,
         "blocks": [
           {
-            "position": {"x": 50, "y": 200},
+            "position": {"x": 150, "y": 200},
             "can_be_moved": true,
             "color": "purple"
           },
-					{
-            "position": {"x": 50, "y": 250},
+          {
+            "position": {"x": 150, "y": 250},
             "can_be_moved": true,
             "color": "purple"
           },
-					{
-            "position": {"x": 50, "y": 300},
+          {
+            "position": {"x": 150, "y": 300},
             "can_be_moved": true,
             "color": "purple"
           },
-					{
-            "position": {"x": 50, "y": 350},
+          {
+            "position": {"x": 150, "y": 350},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 150, "y": 400},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 150, "y": 450},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 150, "y": 500},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 150},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 200},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 250},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 300},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 350},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 400},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {"x": 250, "y": 450},
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 200
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 250
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 300
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 350
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 400
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 450
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 350,
+              "y": 500
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+
+          {
+            "position": {
+              "x": 450,
+              "y": 150
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 200
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 250
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 300
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 350
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 400
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 450,
+              "y": 450
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 200
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 250
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 300
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 350
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 400
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 450
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 550,
+              "y": 500
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+
+          {
+            "position": {
+              "x": 650,
+              "y": 150
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 200
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 250
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 300
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 350
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 400
+            },
+            "can_be_moved": true,
+            "color": "purple"
+          },
+          {
+            "position": {
+              "x": 650,
+              "y": 450
+            },
             "can_be_moved": true,
             "color": "purple"
           }
