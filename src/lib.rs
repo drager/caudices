@@ -1,3 +1,4 @@
+extern crate ncollide2d;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
@@ -23,6 +24,7 @@ use character::{Character, CharacterPosition};
 use futures::future;
 use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
+use ncollide2d::shape::Cuboid;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
@@ -46,6 +48,12 @@ pub enum GameState {
     Over,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+pub enum DrawState {
+    Drawed,
+    Undrawed,
+}
+
 impl Default for GameState {
     fn default() -> Self {
         GameState::Active
@@ -57,6 +65,7 @@ pub struct ScreenState {
     pub current_stage: u16,
     pub current_level: u16,
     pub game_state: GameState,
+    pub draw_state: DrawState,
 }
 
 impl Default for ScreenState {
@@ -65,6 +74,7 @@ impl Default for ScreenState {
             current_stage: 1,
             current_level: 1,
             game_state: GameState::Active,
+            draw_state: DrawState::Undrawed,
         }
     }
 }
@@ -182,6 +192,7 @@ impl Screen {
                 let position = block_with_position.position.position;
 
                 block_asset.execute(|image| {
+                    //let cuboid = Cuboid::new(image.area());
                     window.draw(&image.area().with_center(position), Img(&image));
                     Ok(())
                 })
@@ -304,10 +315,15 @@ impl Screen {
         }
     }
 
-    fn load_assets(animation_positions: Vec<Rectangle>, settings: &Settings) -> Result<GameAsset> {
-        let frame_delay = 1;
+    fn load_fonts(settings: &Settings) -> Asset<Font> {
+        Asset::new(Font::load(settings.mali_font_path.to_owned()))
+    }
 
-        let mali_font = Asset::new(Font::load(settings.mali_font_path.to_owned()));
+    fn load_character_asset(
+        animation_positions: Vec<Rectangle>,
+        settings: &Settings,
+    ) -> Asset<Animation> {
+        let frame_delay = 1;
 
         let character_image =
             Image::load(settings.character_sprites_path.to_owned()).map(move |character_image| {
@@ -318,10 +334,14 @@ impl Screen {
                 )
             });
 
-        let character_asset = Asset::new(character_image);
+        Asset::new(character_image)
+    }
 
-        let block_asset = Asset::new(Image::load(settings.block_asset_path.to_owned()));
+    fn load_block_asset(settings: &Settings) -> Asset<Image> {
+        Asset::new(Image::load(settings.block_asset_path.to_owned()))
+    }
 
+    fn load_stages(settings: &Settings) -> Asset<Vec<Stage>> {
         let stages_file =
             load_file(settings.stages_json_path.to_owned()).and_then(move |stages_bytes| {
                 let stages = map::parse_json(&stages_bytes);
@@ -330,14 +350,7 @@ impl Screen {
                 }))
             });
 
-        let stages_asset = Asset::new(stages_file);
-
-        Ok(GameAsset {
-            mali_font,
-            character_asset,
-            stages: stages_asset,
-            block_asset,
-        })
+        Asset::new(stages_file)
     }
 }
 
@@ -385,8 +398,6 @@ impl State for Screen {
             block_asset_path: "50x50.png".to_owned(),
             stages_json_path: "stages.json".to_owned(),
         };
-
-        let game_asset = Screen::load_assets(animation_positions, &settings)?;
 
         let mut world = World::new();
 
@@ -447,6 +458,18 @@ impl State for Screen {
                 )).build();
         }
 
+        let mali_font = Screen::load_fonts(&settings);
+        let block_asset = Screen::load_block_asset(&settings);
+        let character_asset = Screen::load_character_asset(animation_positions, &settings);
+        let stages = Screen::load_stages(&settings);
+
+        let game_asset = GameAsset {
+            mali_font,
+            block_asset,
+            character_asset,
+            stages,
+        };
+
         world.maintain();
 
         let screen = Screen {
@@ -464,23 +487,13 @@ impl State for Screen {
 
         let mut screen_state = self.world.write_resource::<ScreenState>();
         let characters = self.world.read_storage::<Character>();
-        let mut stages = self.world.write_storage::<Stage>();
+        let stages = self.world.read_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
         let entities = self.world.entities();
 
         let character_asset = &mut self.game_asset.character_asset;
         let animation_positions = &self.settings.animation_positions;
         let time_elapsed = self.time_elapsed;
-        let stages_asset = &mut self.game_asset.stages;
-
-        entities.join().for_each(|entity| {
-            let _ = stages_asset.execute(|fetched_stages| {
-                fetched_stages.iter().for_each(|stage| {
-                    let _ = stages.insert(entity, stage.to_owned());
-                });
-                Ok(())
-            });
-        });
 
         entities.join().for_each(|entity| {
             if let Some(stage) = stages.get(entity) {
@@ -498,7 +511,7 @@ impl State for Screen {
             match screen_state.game_state {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
-                        if let Some(character) = characters.get(entity) {
+                        if let Some(_character) = characters.get(entity) {
                             let _ = character_asset.execute(|character_animation| {
                                 Screen::handle_right_key_for_character(
                                     window,
@@ -545,9 +558,9 @@ impl State for Screen {
 
         let entities = self.world.entities();
         let characters = self.world.read_storage::<Character>();
-        let screen_state = self.world.read_resource::<ScreenState>();
+        let mut screen_state = self.world.write_resource::<ScreenState>();
         let positions = self.world.read_storage::<Position>();
-        let stages = self.world.read_storage::<Stage>();
+        let mut stages = self.world.write_storage::<Stage>();
         let blocks = self.world.read_storage::<Block>();
 
         let font_style = FontStyle::new(72.0, Color::WHITE);
@@ -556,6 +569,18 @@ impl State for Screen {
         let mali_font = &mut self.game_asset.mali_font;
         let block_asset = &mut self.game_asset.block_asset;
         let character_asset = &mut self.game_asset.character_asset;
+        let stages_asset = &mut self.game_asset.stages;
+
+        if let DrawState::Undrawed = screen_state.draw_state {
+            let _ = stages_asset.execute(|fetched_stages| {
+                fetched_stages.iter().for_each(|stage| {
+                    let entity = entities.create();
+                    let _ = stages.insert(entity, stage.to_owned());
+                });
+                screen_state.draw_state = DrawState::Drawed;
+                Ok(())
+            });
+        }
 
         let mut active_rendering = |entity: specs::Entity,
                                     window: &mut Window,
@@ -563,7 +588,7 @@ impl State for Screen {
                                     mali_font: &mut Asset<Font>|
          -> Result<()> {
             if let Some(position) = positions.get(entity) {
-                if let Some(character) = characters.get(entity) {
+                if let Some(_character) = characters.get(entity) {
                     character_asset.execute(|character_image| {
                         Screen::draw_character(window, position, character_image)?;
                         Ok(())
@@ -572,7 +597,7 @@ impl State for Screen {
             }
 
             positions.get(entity).and_then(|position| {
-                blocks.get(entity).map(|block| {
+                blocks.get(entity).map(|_block| {
                     block_asset.execute(|image| {
                         window.draw(&image.area().with_center(position.position), Img(&image));
                         Ok(())
