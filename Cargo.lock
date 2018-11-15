@@ -202,6 +202,7 @@ dependencies = [
  "cfg-if 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "console_error_panic_hook 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nalgebra 0.16.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncollide2d 0.17.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "quicksilver 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.80 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1229,7 +1230,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "nalgebra"
-version = "0.16.8"
+version = "0.16.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "alga 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1249,7 +1250,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "alga 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "approx 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "nalgebra 0.16.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nalgebra 0.16.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "slab 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1556,7 +1557,7 @@ dependencies = [
  "glutin 0.18.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "image 0.19.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lyon 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "nalgebra 0.16.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "nalgebra 0.16.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncollide2d 0.17.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rodio 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2561,7 +2562,7 @@ dependencies = [
 "checksum minimp3 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9ad362c18021c74cebb299a0ef8a4025ca7c1f5b7769d5efe45511456740f7bd"
 "checksum minimp3-sys 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "be06a26e75fdb130d68d6f589f32b1c7d2d0351f67fb7d393f0c78a8d6336ee3"
 "checksum mopa 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "a785740271256c230f57462d3b83e52f998433a7062fc18f96d5999474a9f915"
-"checksum nalgebra 0.16.8 (registry+https://github.com/rust-lang/crates.io-index)" = "a32c7df534ab70fe18fee35fce38ea6733000014fac2819518f19ed6de814d41"
+"checksum nalgebra 0.16.10 (registry+https://github.com/rust-lang/crates.io-index)" = "0f925f48e18bbd78e76aea47ad2091e919574099552831c2c4802aac65a8f9e7"
 "checksum ncollide2d 0.17.1 (registry+https://github.com/rust-lang/crates.io-index)" = "425882363e3630b61ec2462d0d4ad650e692bcff1bd199a8d085226a9dc0f79e"
 "checksum new_debug_unreachable 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0cdc457076c78ab54d5e0d6fa7c47981757f1e34dc39ff92787f217dede586c4"
 "checksum nix 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b7fd5681d13fda646462cfbd4e5f2051279a89a544d50eb98c365b507246839f"

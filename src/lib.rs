@@ -1,13 +1,14 @@
-extern crate ncollide2d;
-extern crate serde;
-extern crate serde_json;
 #[macro_use]
 extern crate stdweb;
-extern crate cfg_if;
-extern crate quicksilver;
 #[macro_use]
 extern crate serde_derive;
+extern crate cfg_if;
 extern crate futures;
+extern crate nalgebra;
+extern crate ncollide2d;
+extern crate quicksilver;
+extern crate serde;
+extern crate serde_json;
 extern crate specs;
 extern crate time;
 
@@ -15,16 +16,17 @@ extern crate time;
 //pub use console_error_panic_hook::set_once as set_panic_hook;
 
 mod character;
+mod collision;
 mod log;
 pub mod map;
 mod stages;
 mod utils;
 
 use character::{Character, CharacterPosition};
+use collision::Collision;
 use futures::future;
-use log::log;
+//use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
-use ncollide2d::shape::Cuboid;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
@@ -38,7 +40,7 @@ use specs::{
 };
 use std::time::Duration;
 
-const WINDOW_WIDTH: u16 = 800;
+const WINDOW_WIDTH: u16 = 600;
 const WINDOW_HEIGHT: u16 = 600;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -141,6 +143,7 @@ pub struct Screen {
     time_elapsed: Duration,
     settings: Settings,
     game_asset: GameAsset,
+    collision_world: collision::Collision,
 }
 
 impl Screen {
@@ -192,7 +195,6 @@ impl Screen {
                 let position = block_with_position.position.position;
 
                 block_asset.execute(|image| {
-                    //let cuboid = Cuboid::new(image.area());
                     window.draw(&image.area().with_center(position), Img(&image));
                     Ok(())
                 })
@@ -368,6 +370,7 @@ struct Settings {
     character_sprites_path: String,
     block_asset_path: String,
     stages_json_path: String,
+    header_height: f32,
 }
 
 fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
@@ -380,6 +383,47 @@ fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
                 .into_iter()
                 .find(|map| map.level == state.current_level)
         })
+}
+
+fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<()> {
+    for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
+        // The top.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (width_index + 1) as f32 * 50.,
+                settings.header_height,
+            )).build();
+        // The bottom.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (width_index + 1) as f32 * 50.,
+                (WINDOW_HEIGHT as u16 - 50).into(),
+            )).build();
+    }
+
+    for height_index in 2..=(WINDOW_HEIGHT / 50) - 2 {
+        // Left side.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(50., (height_index + 1) as f32 * 50.))
+            .build();
+
+        // Right side
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (WINDOW_WIDTH as u16 - 50).into(),
+                (height_index + 1) as f32 * 50.,
+            )).build();
+    }
+
+    Ok(())
 }
 
 impl State for Screen {
@@ -397,6 +441,7 @@ impl State for Screen {
             character_sprites_path: "character_sprites.png".to_owned(),
             block_asset_path: "50x50.png".to_owned(),
             stages_json_path: "stages.json".to_owned(),
+            header_height: 100.,
         };
 
         let mut world = World::new();
@@ -421,42 +466,7 @@ impl State for Screen {
             .with(Character::default())
             .build();
 
-        let header_height = 100.;
-
-        for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
-            // The top.
-            world
-                .create_entity()
-                .with(Block::default())
-                .with(Position::new((width_index + 1) as f32 * 50., header_height))
-                .build();
-            // The bottom.
-            world
-                .create_entity()
-                .with(Block::default())
-                .with(Position::new(
-                    (width_index + 1) as f32 * 50.,
-                    (WINDOW_HEIGHT as u16 - 50).into(),
-                )).build();
-        }
-
-        for height_index in 2..=(WINDOW_HEIGHT / 50) - 2 {
-            // Left side.
-            world
-                .create_entity()
-                .with(Block::default())
-                .with(Position::new(50., (height_index + 1) as f32 * 50.))
-                .build();
-
-            // Right side
-            world
-                .create_entity()
-                .with(Block::default())
-                .with(Position::new(
-                    (WINDOW_WIDTH as u16 - 50).into(),
-                    (height_index + 1) as f32 * 50.,
-                )).build();
-        }
+        create_base_map_entities(&mut world, &settings)?;
 
         let mali_font = Screen::load_fonts(&settings);
         let block_asset = Screen::load_block_asset(&settings);
@@ -472,11 +482,14 @@ impl State for Screen {
 
         world.maintain();
 
+        let collision_world = Collision::new(&mut world);
+
         let screen = Screen {
             world,
             time_elapsed: Duration::new(0, 0),
             settings,
             game_asset,
+            collision_world,
         };
 
         Ok(screen)
@@ -485,6 +498,7 @@ impl State for Screen {
     fn update(&mut self, window: &mut Window) -> Result<()> {
         self.time_elapsed += Duration::from_millis(10);
 
+        let collision_world = &mut self.collision_world;
         let mut screen_state = self.world.write_resource::<ScreenState>();
         let characters = self.world.read_storage::<Character>();
         let stages = self.world.read_storage::<Stage>();
@@ -512,6 +526,9 @@ impl State for Screen {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
                         if let Some(_character) = characters.get(entity) {
+                            let mut w = collision_world.set_character_position(position);
+                            Collision::update(&mut w);
+
                             let _ = character_asset.execute(|character_animation| {
                                 Screen::handle_right_key_for_character(
                                     window,
@@ -555,6 +572,7 @@ impl State for Screen {
 
     fn draw(&mut self, window: &mut Window) -> Result<()> {
         window.clear(Color::BLACK)?;
+        //log(&format!("Fps: {}", window.average_fps()));
 
         let entities = self.world.entities();
         let characters = self.world.read_storage::<Character>();
