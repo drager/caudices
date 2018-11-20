@@ -23,10 +23,11 @@ mod stages;
 mod utils;
 
 use character::{Character, CharacterPosition};
-use collision::Collision;
+use collision::{Collision, CollisionObjectData, CollisionSystem};
 use futures::future;
 //use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
+use ncollide2d::query::Proximity;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
@@ -113,6 +114,7 @@ impl<'a> System<'a> for PhysicsSystem {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Position {
+    // TODO: Remove nested position field and wrap the vector directly instead.
     position: Vector,
 }
 
@@ -143,7 +145,7 @@ pub struct Screen {
     time_elapsed: Duration,
     settings: Settings,
     game_asset: GameAsset,
-    collision_world: collision::Collision,
+    collision_world: Option<collision::Collision>,
 }
 
 impl Screen {
@@ -212,7 +214,8 @@ impl Screen {
             character_animation,
             animation_positions,
             &window.keyboard()[Key::Right],
-            |position| position.position.x += 2.5,
+            // TODO: Get position increament from settings.
+            |position| position.position.x += 1.,
         );
     }
 
@@ -227,7 +230,8 @@ impl Screen {
             character_animation,
             animation_positions,
             &window.keyboard()[Key::Left],
-            |position| position.position.x -= 2.5,
+            // TODO: Get position increament from settings.
+            |position| position.position.x -= 1.,
         );
     }
 
@@ -242,7 +246,8 @@ impl Screen {
             character_animation,
             animation_positions,
             &window.keyboard()[Key::Down],
-            |position| position.position.y += 2.5,
+            // TODO: Get position increament from settings.
+            |position| position.position.y += 1.,
         );
     }
 
@@ -257,7 +262,8 @@ impl Screen {
             character_animation,
             animation_positions,
             &window.keyboard()[Key::Up],
-            |position| position.position.y -= 2.5,
+            // TODO: Get position increament from settings.
+            |position| position.position.y -= 1.0,
         );
     }
 
@@ -448,11 +454,13 @@ impl State for Screen {
 
         world.add_resource(DeltaTime(10.05));
         world.register::<Character>();
+        world.register::<CollisionObjectData>();
 
         let mut dispatcher: Dispatcher = DispatcherBuilder::new()
             .with(StageCreator, "stage_creator", &[])
             .with(PhysicsSystem, "physics_system", &[])
             .with(BlockSystem, "block_system", &["physics_system"])
+            .with(CollisionSystem, "collision_system", &[])
             .build();
 
         dispatcher.setup(&mut world.res);
@@ -466,7 +474,13 @@ impl State for Screen {
             .with(Character::default())
             .build();
 
-        create_base_map_entities(&mut world, &settings)?;
+        world
+            .create_entity()
+            .with(Position::new(150., 150.))
+            .with(Block::default())
+            .build();
+
+        //create_base_map_entities(&mut world, &settings)?;
 
         let mali_font = Screen::load_fonts(&settings);
         let block_asset = Screen::load_block_asset(&settings);
@@ -482,14 +496,12 @@ impl State for Screen {
 
         world.maintain();
 
-        let collision_world = Collision::new(&mut world);
-
         let screen = Screen {
             world,
             time_elapsed: Duration::new(0, 0),
             settings,
             game_asset,
-            collision_world,
+            collision_world: None,
         };
 
         Ok(screen)
@@ -498,8 +510,10 @@ impl State for Screen {
     fn update(&mut self, window: &mut Window) -> Result<()> {
         self.time_elapsed += Duration::from_millis(10);
 
+        let entities_world = &self.world;
         let collision_world = &mut self.collision_world;
         let mut screen_state = self.world.write_resource::<ScreenState>();
+        let mut collision_storage = self.world.write_storage::<CollisionObjectData>();
         let characters = self.world.read_storage::<Character>();
         let stages = self.world.read_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
@@ -526,40 +540,111 @@ impl State for Screen {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
                         if let Some(_character) = characters.get(entity) {
-                            let mut w = collision_world.set_character_position(position);
-                            Collision::update(&mut w);
+                            if let Some(collision_world) = collision_world {
+                                let mut collision =
+                                    collision_world.set_character_position(position);
+                                let collision_events =
+                                    Collision::update(&mut collision, entities_world);
 
-                            let _ = character_asset.execute(|character_animation| {
-                                Screen::handle_right_key_for_character(
-                                    window,
-                                    position,
-                                    character_animation,
-                                    animation_positions,
-                                );
+                                // TODO: Stop doing .0 and .1.
+                                collision_events.into_iter().for_each(|collision_event| {
+                                    let event = collision_event.0;
+                                    let position_data =
+                                        collision_event.1.position().translation.vector.data;
 
-                                Screen::handle_left_key_for_character(
-                                    window,
-                                    position,
-                                    character_animation,
-                                    animation_positions,
-                                );
+                                    match event.new_status {
+                                        // TODO: Better data saving.
+                                        Proximity::Intersecting => collision_storage.insert(
+                                            entity,
+                                            CollisionObjectData::new("", None, Some(position_data)),
+                                        ),
+                                        Proximity::Disjoint => Ok(collision_storage.remove(entity)),
+                                        _ => Ok(None),
+                                    };
+                                });
 
-                                Screen::handle_down_key_for_character(
-                                    window,
-                                    position,
-                                    character_animation,
-                                    animation_positions,
-                                );
+                                println!("Char pos: {:?}", position);
 
-                                Screen::handle_up_key_for_character(
-                                    window,
-                                    position,
-                                    character_animation,
-                                    animation_positions,
-                                );
+                                let _ = character_asset.execute(|character_animation| {
+                                    // TODO: Move this logic elsewhere.
+                                    match collision_storage.get(entity) {
+                                        Some(collision) => {
+                                            println!("Collision at: {:?}", collision);
+                                            let character_x = position.position.x;
+                                            let character_y = position.position.y;
+                                            let collision_x = collision.position.unwrap()[0];
+                                            let collision_y = collision.position.unwrap()[1];
 
-                                Ok(())
-                            });
+                                            if collision_x < character_x {
+                                                Screen::handle_right_key_for_character(
+                                                    window,
+                                                    position,
+                                                    character_animation,
+                                                    animation_positions,
+                                                );
+                                            }
+
+                                            if collision_x > character_x {
+                                                Screen::handle_left_key_for_character(
+                                                    window,
+                                                    position,
+                                                    character_animation,
+                                                    animation_positions,
+                                                );
+                                            }
+
+                                            if collision_y < character_y {
+                                                Screen::handle_down_key_for_character(
+                                                    window,
+                                                    position,
+                                                    character_animation,
+                                                    animation_positions,
+                                                );
+                                            }
+
+                                            if collision_y > character_y {
+                                                Screen::handle_up_key_for_character(
+                                                    window,
+                                                    position,
+                                                    character_animation,
+                                                    animation_positions,
+                                                );
+                                            }
+                                        }
+                                        None => {
+                                            Screen::handle_right_key_for_character(
+                                                window,
+                                                position,
+                                                character_animation,
+                                                animation_positions,
+                                            );
+
+                                            Screen::handle_left_key_for_character(
+                                                window,
+                                                position,
+                                                character_animation,
+                                                animation_positions,
+                                            );
+
+                                            Screen::handle_down_key_for_character(
+                                                window,
+                                                position,
+                                                character_animation,
+                                                animation_positions,
+                                            );
+
+                                            Screen::handle_up_key_for_character(
+                                                window,
+                                                position,
+                                                character_animation,
+                                                animation_positions,
+                                            );
+                                        }
+                                    }
+
+                                    Ok(())
+                                });
+                            }
                         }
                     }
                 }
@@ -574,12 +659,14 @@ impl State for Screen {
         window.clear(Color::BLACK)?;
         //log(&format!("Fps: {}", window.average_fps()));
 
-        let entities = self.world.entities();
-        let characters = self.world.read_storage::<Character>();
-        let mut screen_state = self.world.write_resource::<ScreenState>();
-        let positions = self.world.read_storage::<Position>();
-        let mut stages = self.world.write_storage::<Stage>();
-        let blocks = self.world.read_storage::<Block>();
+        let mut world = &mut self.world;
+        //let mut collision_world = self.collision_world;
+        let entities = world.entities();
+        let characters = world.read_storage::<Character>();
+        let mut screen_state = world.write_resource::<ScreenState>();
+        let positions = world.read_storage::<Position>();
+        let mut stages = world.write_storage::<Stage>();
+        let blocks = world.read_storage::<Block>();
 
         let font_style = FontStyle::new(72.0, Color::WHITE);
 
@@ -590,14 +677,19 @@ impl State for Screen {
         let stages_asset = &mut self.game_asset.stages;
 
         if let DrawState::Undrawed = screen_state.draw_state {
-            let _ = stages_asset.execute(|fetched_stages| {
-                fetched_stages.iter().for_each(|stage| {
-                    let entity = entities.create();
-                    let _ = stages.insert(entity, stage.to_owned());
-                });
-                screen_state.draw_state = DrawState::Drawed;
-                Ok(())
-            });
+            /*let _ = stages_asset.execute(|fetched_stages| {*/
+            //fetched_stages.iter().for_each(|stage| {
+            //let entity = entities.create();
+            //let _ = stages.insert(entity, stage.to_owned());
+            //});
+            //screen_state.draw_state = DrawState::Drawed;
+
+            //Ok(())
+            /*});*/
+        }
+
+        if let None = self.collision_world {
+            self.collision_world = Some(Collision::new(&world));
         }
 
         let mut active_rendering = |entity: specs::Entity,
