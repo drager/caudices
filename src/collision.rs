@@ -44,6 +44,7 @@ pub struct CollisionObjectData {
     pub name: &'static str,
     pub velocity: Option<Vector2<f32>>,
     pub position: Option<MatrixPosition>,
+    pub character_position: Option<Vector2<f32>>,
 }
 
 impl CollisionObjectData {
@@ -51,6 +52,7 @@ impl CollisionObjectData {
         name: &'static str,
         velocity: Option<Vector2<f32>>,
         position: Option<MatrixPosition>,
+        character_position: Option<Vector2<f32>>,
     ) -> CollisionObjectData {
         let init_velocity = if let Some(velocity) = velocity {
             Some(velocity)
@@ -62,6 +64,7 @@ impl CollisionObjectData {
             name: name,
             velocity: init_velocity,
             position,
+            character_position,
         }
     }
 }
@@ -169,9 +172,9 @@ impl Collision {
         others_groups.set_membership(&[2]);
         others_groups.set_whitelist(&[1]);
 
-        let rect_data_purple = CollisionObjectData::new("purple", None, None);
+        let rect_data_purple = CollisionObjectData::new("purple", None, None, None);
         let character_data =
-            CollisionObjectData::new("character", Some(Vector2::new(12.0, 12.0)), None);
+            CollisionObjectData::new("character", Some(Vector2::new(32.0, 12.0)), None, None);
 
         // Collision world 0.02 optimization margin and small object identifiers.
         let mut collision_world = CollisionWorld::new(0.);
@@ -180,25 +183,25 @@ impl Collision {
         let proximity_query = GeometricQueryType::Proximity(0.0);
         let rect = ShapeHandle::new(Cuboid::new(Vector2::new(25.0f32, 25.0)));
 
-        /*isometry_positions.iter().for_each(|position| {*/
-        //collision_world.add(
-        //*position,
-        //rect.clone(),
-        //others_groups,
-        //proximity_query,
-        //rect_data_purple.clone(),
-        //);
-        //});
+        isometry_positions.iter().for_each(|position| {
+            collision_world.add(
+                *position,
+                rect.clone(),
+                others_groups,
+                proximity_query,
+                rect_data_purple.clone(),
+            );
+        });
 
         println!("POSS {:?}", isometry_positions);
 
-        collision_world.add(
-            isometry_positions[0],
-            rect.clone(),
-            others_groups,
-            proximity_query,
-            rect_data_purple,
-        );
+        //collision_world.add(
+        //isometry_positions[0],
+        //rect.clone(),
+        //others_groups,
+        //proximity_query,
+        //rect_data_purple,
+        /*);*/
         /*collision_world.add(*/
         //isometry_positions[1],
         //rect.clone(),
@@ -221,7 +224,11 @@ impl Collision {
         //rect_data_yellow,
         /*);*/
 
-        let character = ShapeHandle::new(Ball::new(11.5f32));
+        //let character = ShapeHandle::new(Ball::new(15.5f32));
+
+        // TODO: When Capsule implements Shape we should use it instead of a Cuboid.
+        // https://github.com/rustsim/ncollide/issues/175
+        let character = ShapeHandle::new(Cuboid::new(Vector2::new(15.0, 11.0)));
 
         let character_position: Isometry2<f32> = character_position[0];
 

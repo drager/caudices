@@ -25,6 +25,7 @@ mod utils;
 use character::{Character, CharacterPosition};
 use collision::{Collision, CollisionObjectData, CollisionSystem};
 use futures::future;
+use nalgebra::{Isometry2, Vector2};
 //use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
 use ncollide2d::query::Proximity;
@@ -432,10 +433,18 @@ fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<()
     Ok(())
 }
 
+#[derive(Debug, PartialEq)]
+enum MovingState {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 impl State for Screen {
     fn new() -> Result<Self> {
-        let animation_start_position = Rectangle::new(Vector::new(35, 46), Vector::new(29, 22));
-        let animation_moving_position = Rectangle::new(Vector::new(69, 46), Vector::new(29, 22));
+        let animation_start_position = Rectangle::new(Vector::new(0, 12), Vector::new(29, 21));
+        let animation_moving_position = Rectangle::new(Vector::new(32, 12), Vector::new(28, 21));
         let animation_positions = vec![animation_start_position, animation_moving_position];
 
         let settings = Settings {
@@ -444,7 +453,7 @@ impl State for Screen {
                 CharacterPosition::Moving(animation_moving_position),
             ],
             mali_font_path: "mali/Mali-Regular.ttf".to_owned(),
-            character_sprites_path: "character_sprites.png".to_owned(),
+            character_sprites_path: "character_sprite_0_white.png".to_owned(),
             block_asset_path: "50x50.png".to_owned(),
             stages_json_path: "stages.json".to_owned(),
             header_height: 100.,
@@ -477,6 +486,12 @@ impl State for Screen {
         world
             .create_entity()
             .with(Position::new(150., 150.))
+            .with(Block::default())
+            .build();
+
+        world
+            .create_entity()
+            .with(Position::new(150., 200.))
             .with(Block::default())
             .build();
 
@@ -536,6 +551,15 @@ impl State for Screen {
                     });
             }
 
+            let start_moving_state = || {
+                vec![
+                    MovingState::Left,
+                    MovingState::Right,
+                    MovingState::Top,
+                    MovingState::Bottom,
+                ]
+            };
+
             match screen_state.game_state {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
@@ -551,101 +575,124 @@ impl State for Screen {
                                     let event = collision_event.0;
                                     let position_data =
                                         collision_event.1.position().translation.vector.data;
+                                    let matrix_position =
+                                        Vector2::new(position.position.x, position.position.y);
+                                    let collision_object_data = CollisionObjectData::new(
+                                        "",
+                                        None,
+                                        Some(position_data),
+                                        Some(matrix_position),
+                                    );
 
-                                    match event.new_status {
+                                    let ne = entities
+                                        .build_entity()
+                                        .with(collision_object_data.clone(), &mut collision_storage)
+                                        .build();
+                                    let _: Result<
+                                        Option<CollisionObjectData>,
+                                    > = match event.new_status {
                                         // TODO: Better data saving.
-                                        Proximity::Intersecting => collision_storage.insert(
-                                            entity,
-                                            CollisionObjectData::new("", None, Some(position_data)),
-                                        ),
-                                        Proximity::Disjoint => Ok(collision_storage.remove(entity)),
+                                        Proximity::Intersecting => {
+                                            collision_storage.insert(entity, collision_object_data);
+                                            Ok(None)
+                                        }
+                                        Proximity::Disjoint => {
+                                            println!("Removing entity {:?}", entity.id());
+                                            collision_storage.remove(entity);
+                                            Ok(None)
+                                        }
                                         _ => Ok(None),
                                     };
                                 });
+                            }
+                        }
+                    }
 
-                                println!("Char pos: {:?}", position);
+                    let moving_states = if let Some(_position) = positions.get_mut(entity) {
+                        // TODO: Move this logic elsewhere.
+                        match collision_storage.get(entity) {
+                            Some(collision) => {
+                                println!("E {:?}", entity);
+                                let position = collision.character_position.unwrap();
+                                /*println!("Collision at: {:?}", collision.position);*/
+                                /*println!("Character at: {:?}", position);*/
+                                let character_x = position.x;
+                                let character_y = position.y;
+                                let collision_x = collision.position.unwrap()[0];
+                                let collision_y = collision.position.unwrap()[1];
+                                let half_size = 35.;
 
-                                let _ = character_asset.execute(|character_animation| {
-                                    // TODO: Move this logic elsewhere.
-                                    match collision_storage.get(entity) {
-                                        Some(collision) => {
-                                            println!("Collision at: {:?}", collision);
-                                            let character_x = position.position.x;
-                                            let character_y = position.position.y;
-                                            let collision_x = collision.position.unwrap()[0];
-                                            let collision_y = collision.position.unwrap()[1];
+                                if (character_x - half_size) <= collision_x
+                                    && (character_y - half_size) >= collision_y
+                                {
+                                    println!("BOTTOM");
+                                    vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
+                                } else if (character_x + half_size) >= collision_x
+                                    && (character_y + half_size) <= collision_y
+                                {
+                                    println!("TOP");
+                                    vec![MovingState::Right, MovingState::Left, MovingState::Top]
+                                } else if (character_x + half_size) <= collision_x
+                                    && (character_y - half_size) <= collision_y
+                                {
+                                    println!("LEFT");
+                                    vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
+                                }
+                                // Right side
+                                else if (character_x + half_size) >= collision_x
+                                    && (character_y + half_size) >= collision_y
+                                {
+                                    println!("RIGHT");
+                                    vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
+                                } else {
+                                    start_moving_state()
+                                }
+                            }
+                            None => start_moving_state(),
+                        }
+                    } else {
+                        start_moving_state()
+                    };
 
-                                            if collision_x < character_x {
-                                                Screen::handle_right_key_for_character(
-                                                    window,
-                                                    position,
-                                                    character_animation,
-                                                    animation_positions,
-                                                );
-                                            }
-
-                                            if collision_x > character_x {
-                                                Screen::handle_left_key_for_character(
-                                                    window,
-                                                    position,
-                                                    character_animation,
-                                                    animation_positions,
-                                                );
-                                            }
-
-                                            if collision_y < character_y {
-                                                Screen::handle_down_key_for_character(
-                                                    window,
-                                                    position,
-                                                    character_animation,
-                                                    animation_positions,
-                                                );
-                                            }
-
-                                            if collision_y > character_y {
-                                                Screen::handle_up_key_for_character(
-                                                    window,
-                                                    position,
-                                                    character_animation,
-                                                    animation_positions,
-                                                );
-                                            }
-                                        }
-                                        None => {
-                                            Screen::handle_right_key_for_character(
-                                                window,
-                                                position,
-                                                character_animation,
-                                                animation_positions,
-                                            );
-
-                                            Screen::handle_left_key_for_character(
-                                                window,
-                                                position,
-                                                character_animation,
-                                                animation_positions,
-                                            );
-
+                    if let Some(position) = positions.get_mut(entity) {
+                        let _ = character_asset.execute(|character_animation| {
+                            if let Some(_character) = characters.get(entity) {
+                                moving_states.iter().for_each(|moving_state| {
+                                    //println!("Moving state {:?}", moving_state);
+                                    match moving_state {
+                                        MovingState::Bottom => {
                                             Screen::handle_down_key_for_character(
                                                 window,
                                                 position,
                                                 character_animation,
                                                 animation_positions,
-                                            );
-
-                                            Screen::handle_up_key_for_character(
+                                            )
+                                        }
+                                        MovingState::Left => Screen::handle_left_key_for_character(
+                                            window,
+                                            position,
+                                            character_animation,
+                                            animation_positions,
+                                        ),
+                                        MovingState::Right => {
+                                            Screen::handle_right_key_for_character(
                                                 window,
                                                 position,
                                                 character_animation,
                                                 animation_positions,
-                                            );
+                                            )
                                         }
+                                        MovingState::Top => Screen::handle_up_key_for_character(
+                                            window,
+                                            position,
+                                            character_animation,
+                                            animation_positions,
+                                        ),
                                     }
-
-                                    Ok(())
                                 });
                             }
-                        }
+                            Ok(())
+                        });
                     }
                 }
                 _ => {}
