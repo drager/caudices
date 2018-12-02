@@ -4,6 +4,7 @@ extern crate stdweb;
 extern crate serde_derive;
 extern crate cfg_if;
 extern crate futures;
+extern crate hibitset;
 extern crate nalgebra;
 extern crate ncollide2d;
 extern crate quicksilver;
@@ -25,7 +26,7 @@ mod utils;
 use character::{Character, CharacterPosition};
 use collision::{Collision, CollisionObjectData, CollisionSystem};
 use futures::future;
-use nalgebra::{Isometry2, Vector2};
+use nalgebra::Vector2;
 //use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
 use ncollide2d::query::Proximity;
@@ -480,7 +481,12 @@ impl State for Screen {
             .create_entity()
             .with(Velocity { x: 0.1, y: 0.2 })
             .with(Position::new(130., 330.))
-            .with(Character::default())
+            .with(CollisionObjectData::new(
+                "character",
+                None,
+                None,
+                Some(Vector2::new(130., 330.)),
+            )).with(Character::default())
             .build();
 
         world
@@ -560,139 +566,166 @@ impl State for Screen {
                 ]
             };
 
+            // TODO: Move this logic elsewhere/*.*/
+            let calculate_moving_state = |collision: CollisionObjectData| {
+                if let Some(position) = collision.character_position {
+                    let character_x = position.x;
+                    let character_y = position.y;
+                    let half_size = 35.;
+
+                    if let Some(collision_pos) = collision.position {
+                        let collision_x = collision_pos[0];
+                        let collision_y = collision_pos[1];
+
+                        if (character_x - half_size) <= collision_x
+                            && (character_y - half_size) >= collision_y
+                        {
+                            //println!("BOTTOM");
+                            vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
+                        } else if (character_x + half_size) >= collision_x
+                            && (character_y + half_size) <= collision_y
+                        {
+                            //println!("TOP");
+                            vec![MovingState::Right, MovingState::Left, MovingState::Top]
+                        } else if (character_x + half_size) <= collision_x
+                            && (character_y - half_size) <= collision_y
+                        {
+                            //println!("LEFT");
+                            vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
+                        }
+                        // Right side
+                        else if (character_x + half_size) >= collision_x
+                            && (character_y + half_size) >= collision_y
+                        {
+                            //println!("RIGHT");
+                            vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
+                        } else {
+                            start_moving_state()
+                        }
+                    } else {
+                        start_moving_state()
+                    }
+                } else {
+                    start_moving_state()
+                }
+            };
+
+            let move_character =
+                |moving_states: Vec<_>,
+                 window: &mut Window,
+                 position: &mut Position,
+                 character_animation: &mut Animation,
+                 animation_positions: &Vec<CharacterPosition>| {
+                    moving_states.iter().for_each(|moving_state| {
+                        //println!("Moving state {:?}", moving_state);
+                        match moving_state {
+                            MovingState::Bottom => Screen::handle_down_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            ),
+                            MovingState::Left => Screen::handle_left_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            ),
+                            MovingState::Right => Screen::handle_right_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            ),
+                            MovingState::Top => Screen::handle_up_key_for_character(
+                                window,
+                                position,
+                                character_animation,
+                                animation_positions,
+                            ),
+                        }
+                    });
+                };
+
             match screen_state.game_state {
                 GameState::Active => {
                     if let Some(position) = positions.get_mut(entity) {
                         if let Some(_character) = characters.get(entity) {
-                            if let Some(collision_world) = collision_world {
-                                let mut collision =
-                                    collision_world.set_character_position(position);
-                                let collision_events =
-                                    Collision::update(&mut collision, entities_world);
+                            let _ = character_asset.execute(|character_animation| {
+                                if let Some(collision_world) = collision_world {
+                                    let mut collision =
+                                        collision_world.set_character_position(position);
+                                    let collision_events =
+                                        Collision::update(&mut collision, entities_world);
 
-                                // TODO: Stop doing .0 and .1.
-                                collision_events.into_iter().for_each(|collision_event| {
-                                    let event = collision_event.0;
-                                    let position_data =
-                                        collision_event.1.position().translation.vector.data;
-                                    let matrix_position =
-                                        Vector2::new(position.position.x, position.position.y);
-                                    let collision_object_data = CollisionObjectData::new(
-                                        "",
-                                        None,
-                                        Some(position_data),
-                                        Some(matrix_position),
-                                    );
-
-                                    let ne = entities
-                                        .build_entity()
-                                        .with(collision_object_data.clone(), &mut collision_storage)
-                                        .build();
-                                    let _: Result<
-                                        Option<CollisionObjectData>,
-                                    > = match event.new_status {
-                                        // TODO: Better data saving.
-                                        Proximity::Intersecting => {
-                                            collision_storage.insert(entity, collision_object_data);
-                                            Ok(None)
-                                        }
-                                        Proximity::Disjoint => {
-                                            println!("Removing entity {:?}", entity.id());
-                                            collision_storage.remove(entity);
-                                            Ok(None)
-                                        }
-                                        _ => Ok(None),
-                                    };
-                                });
-                            }
-                        }
-                    }
-
-                    let moving_states = if let Some(_position) = positions.get_mut(entity) {
-                        // TODO: Move this logic elsewhere.
-                        match collision_storage.get(entity) {
-                            Some(collision) => {
-                                println!("E {:?}", entity);
-                                let position = collision.character_position.unwrap();
-                                /*println!("Collision at: {:?}", collision.position);*/
-                                /*println!("Character at: {:?}", position);*/
-                                let character_x = position.x;
-                                let character_y = position.y;
-                                let collision_x = collision.position.unwrap()[0];
-                                let collision_y = collision.position.unwrap()[1];
-                                let half_size = 35.;
-
-                                if (character_x - half_size) <= collision_x
-                                    && (character_y - half_size) >= collision_y
-                                {
-                                    println!("BOTTOM");
-                                    vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
-                                } else if (character_x + half_size) >= collision_x
-                                    && (character_y + half_size) <= collision_y
-                                {
-                                    println!("TOP");
-                                    vec![MovingState::Right, MovingState::Left, MovingState::Top]
-                                } else if (character_x + half_size) <= collision_x
-                                    && (character_y - half_size) <= collision_y
-                                {
-                                    println!("LEFT");
-                                    vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
-                                }
-                                // Right side
-                                else if (character_x + half_size) >= collision_x
-                                    && (character_y + half_size) >= collision_y
-                                {
-                                    println!("RIGHT");
-                                    vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
-                                } else {
-                                    start_moving_state()
-                                }
-                            }
-                            None => start_moving_state(),
-                        }
-                    } else {
-                        start_moving_state()
-                    };
-
-                    if let Some(position) = positions.get_mut(entity) {
-                        let _ = character_asset.execute(|character_animation| {
-                            if let Some(_character) = characters.get(entity) {
-                                moving_states.iter().for_each(|moving_state| {
-                                    //println!("Moving state {:?}", moving_state);
-                                    match moving_state {
-                                        MovingState::Bottom => {
-                                            Screen::handle_down_key_for_character(
-                                                window,
-                                                position,
-                                                character_animation,
-                                                animation_positions,
-                                            )
-                                        }
-                                        MovingState::Left => Screen::handle_left_key_for_character(
+                                    if collision_events.is_empty() {
+                                        println!("Empty");
+                                        let moving_states = start_moving_state();
+                                        move_character(
+                                            moving_states,
                                             window,
                                             position,
                                             character_animation,
                                             animation_positions,
-                                        ),
-                                        MovingState::Right => {
-                                            Screen::handle_right_key_for_character(
-                                                window,
-                                                position,
-                                                character_animation,
-                                                animation_positions,
-                                            )
-                                        }
-                                        MovingState::Top => Screen::handle_up_key_for_character(
-                                            window,
-                                            position,
-                                            character_animation,
-                                            animation_positions,
-                                        ),
+                                        );
+                                    } else {
+                                        // TODO: Stop doing .0 and .1.
+                                        collision_events.into_iter().for_each(|collision_event| {
+                                            let event = collision_event.0;
+                                            let position_data = collision_event
+                                                .1
+                                                .position()
+                                                .translation
+                                                .vector
+                                                .data;
+                                            let matrix_position = Vector2::new(
+                                                position.position.x,
+                                                position.position.y,
+                                            );
+                                            let collision_object_data = CollisionObjectData::new(
+                                                "",
+                                                None,
+                                                Some(position_data),
+                                                Some(matrix_position),
+                                            );
+
+                                            let ne = entities
+                                                .build_entity()
+                                                .with(
+                                                    collision_object_data.clone(),
+                                                    &mut collision_storage,
+                                                ).build();
+                                            let _: Result<
+                                            Option<CollisionObjectData>,
+                                        > = match event.new_status {
+                                            // TODO: Better data saving.
+                                            // TODO: I think it's the insertation that's weird.
+                                            // if we have one collision active then we shouldn't insert
+                                            // one more because then the character may move differently
+                                            // (up when it shouldn't be able to for example).
+                                            // TODO: Maybe not, it seems that it occurs on removal...
+                                            Proximity::Intersecting => {
+                                                let moving_states =
+                                                    calculate_moving_state(collision_object_data);
+                                                move_character(
+                                                    moving_states,
+                                                    window,
+                                                    position,
+                                                    character_animation,
+                                                    animation_positions,
+                                                );
+                                                Ok(None)
+                                            },
+                                            Proximity::Disjoint => Ok(None),
+                                            _ => Ok(None),
+                                        };
+                                        });
                                     }
-                                });
-                            }
-                            Ok(())
-                        });
+                                }
+
+                                Ok(())
+                            });
+                        }
                     }
                 }
                 _ => {}
