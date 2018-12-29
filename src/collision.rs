@@ -7,8 +7,16 @@ use ncollide2d::shape::{Cuboid, ShapeHandle};
 use ncollide2d::world::{
     CollisionGroups, CollisionObject, CollisionObjectHandle, CollisionWorld, GeometricQueryType,
 };
-use physics::CollisionHandle;
-use specs::{Component, Entities, Join, LazyUpdate, Read, System, VecStorage, WriteStorage};
+use physics::{CollisionHandle, MovingState, PhysicsSystem, Velocity};
+use specs::{
+    Component, Entities, Join, LazyUpdate, Read, ReadStorage, System, VecStorage, Write,
+    WriteStorage,
+};
+
+pub struct ProximityData {
+    pub proximity_event: ProximityEvent,
+    pub collision_object: CollisionObject<f32, CollisionObjectData>,
+}
 
 impl Component for CollisionObjectData {
     type Storage = VecStorage<Self>;
@@ -20,19 +28,102 @@ impl<'a> System<'a> for CollisionSystem {
     type SystemData = (
         Entities<'a>,
         WriteStorage<'a, CollisionHandle>,
-        //ReadStorage<'a, Position>,
+        WriteStorage<'a, Velocity>,
+        ReadStorage<'a, Character>,
+        ReadStorage<'a, Position>,
+        Write<'a, Collision>,
         Read<'a, LazyUpdate>,
     );
 
-    fn run(&mut self, (entities, mut collision_objects, _updater): Self::SystemData) {
-        /*let e = entities.create();*/
-
-        (&entities, &mut collision_objects)
+    fn run(
+        &mut self,
+        (
+            entities,
+            mut collision_objects,
+            mut velocity_storage,
+            _character_storage,
+            position_storage,
+            mut collision_world,
+            _updater,
+        ): Self::SystemData,
+    ) {
+        let x = (&entities, &mut collision_objects)
             .join()
-            .for_each(|(_entity, _collision_object)| {
-                println!("Got collision in system {:?}", _collision_object);
+            .map(|(entity, collision_data)| {
+                //if let Some(character_position) = position_storage.get(entity) {
+                //if let Some(ref mut velocity) = velocity_storage.get_mut(entity) {
+                //println!("Got C {:?} with velocity {:?}", character_position, c);
+                //println!("Coll obj {:?}", collision_object.0);
+
+                let character_entity = collision_data.character_entity;
+                if let Some(character_position) = position_storage.get(character_entity) {
+                    if let Some(ref mut velocity) = velocity_storage.get_mut(character_entity) {
+                        let block_position = collision_data
+                            .collision_data
+                            .collision_object
+                            .position()
+                            .translation
+                            .vector;
+                        let moving_state = PhysicsSystem::calculate_moving_state(
+                            &block_position,
+                            character_position,
+                        );
+                        //println!("ASD {:?}", (*collision_data).collision_data.proximity_event);
+                        //println!("char pos {:?}", character_position);
+                        //println!("Moving State {:?}", moving_state);
+                        let start_moving_state = PhysicsSystem::get_start_moving_state();
+                        let cant_move_at_states = start_moving_state
+                            .iter()
+                            .filter(|state| !moving_state.contains(state))
+                            .collect::<Vec<&MovingState>>();
+                        //println!("Except State {:?}", cant_move_at_states)/*;*/
+                        /*cant_move_at_states.iter().for_each(|cant_move_at_state| {*/
+                            //match cant_move_at_state {
+                                //MovingState::Left => velocity.x = velocity.x.max(0.),
+                                //MovingState::Right => velocity.x = velocity.x.min(0.),
+                                //MovingState::Top => velocity.y = velocity.y.max(0.),
+                                //MovingState::Bottom => velocity.y = velocity.y.min(0.),
+                            //}
+                        /*});*/
+
+                        Some(entity)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+                //println!("Got collision in system {:?}", block_position);
+
                 //updater.insert(collision_object, position.clone());
-            });
+            })
+            .filter_map(|entity_opt| entity_opt)
+            .collect::<Vec<specs::Entity>>();
+
+        x.iter().for_each(|e| {
+            if let Some(data) = collision_objects.get(*e) {
+                if let Some(character_position) = position_storage.get(data.character_entity) {
+                    /*let new_collisions =*/
+                        //PhysicsSystem::update_collision(character_position, &mut collision_world);
+
+                    //new_collisions.iter().for_each(|new_collision| {
+                        //if new_collision.proximity_event.new_status == Proximity::Disjoint
+                            //&& new_collision.proximity_event.collider2.0
+                                //== data.collision_data.proximity_event.collider2.0
+                        //{
+                            //println!("NEW COL {:?}", new_collision.proximity_event);
+
+                        //_updater.remove::<CollisionHandle>(*e);
+                        //}
+                    /*});*/
+                    //println!("Data {:?}", data.collision_data.proximity_event);
+                    if data.collision_data.proximity_event.new_status == Proximity::Disjoint {
+                        println!("Removing E {:?}", e);
+                        _updater.remove::<CollisionHandle>(*e);
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -68,46 +159,40 @@ impl CollisionObjectData {
     }
 }
 
-// TODO: Better return type.
 pub fn handle_proximity_event<'a, 'b>(
     collision_world: &'a CollisionWorld<f32, CollisionObjectData>,
     event: &'a ProximityEvent,
-) -> (
-    ProximityEvent,
-    CollisionObject<f32, CollisionObjectData>,
-    String,
-) {
-    println!("handle proximity");
+) -> ProximityData {
+    //println!("handle proximity");
     let co1 = collision_world.collision_object(event.collider1).unwrap();
     let co2 = collision_world.collision_object(event.collider2).unwrap();
     // TODO: This shouldn't be needed to do. A reference should be able to return.
     let co3 = CollisionObject::new(
-        co1.handle(),
-        co1.proxy_handle(),
-        co1.position().clone(),
-        co1.shape().clone(),
-        co1.collision_groups().clone(),
-        co1.query_type(),
-        co1.data().clone(),
+        co2.handle(),
+        co2.proxy_handle(),
+        co2.position().clone(),
+        co2.shape().clone(),
+        co2.collision_groups().clone(),
+        co2.query_type(),
+        co2.data().clone(),
     );
 
     let area_name = if co1.data().velocity.is_none() {
-        co1.data().name
+    co1.data().name
     } else {
-        co2.data().name
+    co2.data().name
     };
 
     if event.new_status == Proximity::Intersecting {
-        println!("Collision detected for area {}", area_name);
+    println!("Collision detected for area {}", area_name);
     } else if event.new_status == Proximity::Disjoint {
-        println!("No longer colliding for area {}", area_name);
+    println!("No longer colliding for area {}", area_name);
     }
 
-    (
-        *event,
-        co3,
-        area_name.to_string(), /*, collision_storage*/
-    )
+    ProximityData {
+        proximity_event: *event,
+        collision_object: co3,
+    }
 }
 
 #[derive(Default)]

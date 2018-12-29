@@ -35,7 +35,7 @@ use ncollide2d::query::Proximity;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
-    input::{ButtonState, Key},
+    input::{ButtonState, Key, Keyboard},
     lifecycle::{run, Asset, Settings as QuickSilverSettings, State, Window},
     load_file, Future, Result,
 };
@@ -410,7 +410,7 @@ impl State for Screen<'static> {
 
         let collisions = PhysicsSystem::init_collision_world();
 
-        world.add_resource(DeltaTime(10.05));
+        world.add_resource(DeltaTime(10.0));
         world.add_resource(collisions);
         /*world.register::<Position>();*/
         /*world.register::<Velocity>();*/
@@ -436,7 +436,7 @@ impl State for Screen<'static> {
         // TODO: One approach might be to move these before we create the dispatcher.
         world
             .create_entity()
-            .with(Velocity { x: 0.1, y: 0.2 })
+            .with(Velocity { x: 0., y: 0. })
             .with(Position::new(130., 330.))
             .with(Character::default())
             .build();
@@ -457,7 +457,7 @@ impl State for Screen<'static> {
 
         world.maintain();
 
-        let (x, y) = PhysicsSystem::setup_handles(
+        PhysicsSystem::setup_handles(
             &world.entities(),
             &mut world.write_resource::<Collision>(),
             &world.read_storage::<Velocity>(),
@@ -503,17 +503,56 @@ impl State for Screen<'static> {
         self.world.maintain();
         self.dispatcher.dispatch(&self.world.res);
 
-        //let collision_world = &mut self.collision_world;
         let mut screen_state = self.world.write_resource::<ScreenState>();
-        //let mut collision_storage = self.world.write_storage::<CollisionObjectData>();
         let characters = self.world.read_storage::<Character>();
         let stages = self.world.read_storage::<Stage>();
         let mut positions = self.world.write_storage::<Position>();
+        let mut velocity_storage = self.world.write_storage::<Velocity>();
         let entities = self.world.entities();
 
         let character_asset = &mut self.game_asset.character_asset;
         let animation_positions = &self.settings.animation_positions;
         let time_elapsed = self.time_elapsed;
+
+        let handle_keys = |velocity: &mut Velocity| {
+            let mut key_match =
+                |key: Key,
+                 on_press: Box<Fn(&mut Velocity) -> ()>,
+                 on_release: Box<Fn(&mut Velocity) -> ()>| match window.keyboard()
+                    [key]
+                {
+                    ButtonState::Pressed | ButtonState::Held => {
+                        on_press(velocity);
+                    }
+                    ButtonState::Released => {
+                        on_release(velocity);
+                    }
+                    ButtonState::NotPressed => {}
+                };
+
+            let velocity_change = 0.1;
+
+            key_match(
+                Key::Up,
+                Box::new(move |velocity| velocity.y = -velocity_change),
+                Box::new(|velocity| velocity.y = 0.),
+            );
+            key_match(
+                Key::Down,
+                Box::new(move |velocity| velocity.y = velocity_change),
+                Box::new(|velocity| velocity.y = 0.),
+            );
+            key_match(
+                Key::Left,
+                Box::new(move |velocity| velocity.x = -velocity_change),
+                Box::new(|velocity| velocity.x = 0.),
+            );
+            key_match(
+                Key::Right,
+                Box::new(move |velocity| velocity.x = velocity_change),
+                Box::new(|velocity| velocity.x = 0.),
+            );
+        };
 
         entities.join().for_each(|entity| {
             if let Some(stage) = stages.get(entity) {
@@ -528,143 +567,80 @@ impl State for Screen<'static> {
                     });
             }
 
-            let start_moving_state = || {
-                vec![
-                    MovingState::Left,
-                    MovingState::Right,
-                    MovingState::Top,
-                    MovingState::Bottom,
-                ]
-            };
-
-            // TODO: Move this logic elsewhere/*.*
-            let move_character =
-                |moving_states: Vec<_>,
-                 window: &mut Window,
-                 position: &mut Position,
-                 character_animation: &mut Animation,
-                 animation_positions: &Vec<CharacterPosition>| {
-                    moving_states.iter().for_each(|moving_state| {
-                        //println!("Moving state {:?}", moving_state);
-                        match moving_state {
-                            MovingState::Bottom => Screen::handle_down_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            ),
-                            MovingState::Left => Screen::handle_left_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            ),
-                            MovingState::Right => Screen::handle_right_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            ),
-                            MovingState::Top => Screen::handle_up_key_for_character(
-                                window,
-                                position,
-                                character_animation,
-                                animation_positions,
-                            ),
-                        }
-                    });
-                };
-
-            match screen_state.game_state {
-                GameState::Active => {
-                    if let Some(position) = positions.get_mut(entity) {
-                        if let Some(_character) = characters.get(entity) {
-                            let _ = character_asset.execute(|character_animation| {
-                                let moving_states = start_moving_state();
-                                move_character(
-                                    moving_states,
-                                    window,
-                                    position,
-                                    character_animation,
-                                    animation_positions,
-                                );
-
-                                /*if let Some(collision_world) = collision_world {*/
-                                //let mut collision =
-                                //collision_world.set_character_position(position);
-                                //let collision_events =
-                                //Collision::update(&mut collision, entities_world);
-                                ////println!("Events {:?}", collision_events.len());
-
-                                //if collision_events.is_empty() {
-                                //let moving_states = start_moving_state();
-                                //move_character(
-                                //moving_states,
-                                //window,
-                                //position,
-                                //character_animation,
-                                //animation_positions,
-                                //);
-                                //} else {
-                                //// TODO: Stop doing .0 and .1.
-                                //collision_events.into_iter().for_each(|collision_event| {
-                                //let event = collision_event.0;
-                                //let position_data = collision_event
-                                //.1
-                                //.position()
-                                //.translation
-                                //.vector
-                                //.data;
-                                //let matrix_position =
-                                //Vector2::new(position.0.x, position.0.y);
-                                //let collision_object_data = CollisionObjectData::new(
-                                //"",
-                                //None,
-                                //Some(position_data),
-                                //Some(matrix_position),
-                                //);
-
-                                //let ne = entities
-                                //.build_entity()
-                                //.with(
-                                //collision_object_data.clone(),
-                                //&mut collision_storage,
-                                //).build();
-                                //let _: Result<
-                                //Option<CollisionObjectData>,
-                                //> = match event.new_status {
-                                //// TODO: Better data saving.
-                                //// TODO: I think it's the insertation that's weird.
-                                //// if we have one collision active then we shouldn't insert
-                                //// one more because then the character may move differently
-                                //// (up when it shouldn't be able to for example).
-                                //// TODO: Maybe not, it seems that it occurs on removal...
-                                //Proximity::Intersecting => {
-                                //let moving_states =
-                                //calculate_moving_state(collision_object_data);
-                                //move_character(
-                                //moving_states,
-                                //window,
-                                //position,
-                                //character_animation,
-                                //animation_positions,
-                                //);
-                                //Ok(None)
-                                //},
-                                //Proximity::Disjoint => Ok(None),
-                                //_ => Ok(None),
-                                //};
-                                //});
-                                //}
-                                /*}*/
-
-                                Ok(())
-                            });
-                        }
-                    }
+            if let Some(_character) = characters.get(entity) {
+                if let Some(velocity) = velocity_storage.get_mut(entity) {
+                    handle_keys(velocity);
                 }
-                _ => {}
             }
+
+            /*let start_moving_state = || {*/
+            //vec![
+            //MovingState::Left,
+            //MovingState::Right,
+            //MovingState::Top,
+            //MovingState::Bottom,
+            //]
+            //};
+
+            //// TODO: Move this logic elsewhere[>.*
+            //let move_character =
+            //|moving_states: Vec<_>,
+            //window: &mut Window,
+            //position: &mut Position,
+            //character_animation: &mut Animation,
+            //animation_positions: &Vec<CharacterPosition>| {
+            //moving_states.iter().for_each(|moving_state| {
+            ////println!("Moving state {:?}", moving_state);
+            //match moving_state {
+            //MovingState::Bottom => Screen::handle_down_key_for_character(
+            //window,
+            //position,
+            //character_animation,
+            //animation_positions,
+            //),
+            //MovingState::Left => Screen::handle_left_key_for_character(
+            //window,
+            //position,
+            //character_animation,
+            //animation_positions,
+            //),
+            //MovingState::Right => Screen::handle_right_key_for_character(
+            //window,
+            //position,
+            //character_animation,
+            //animation_positions,
+            //),
+            //MovingState::Top => Screen::handle_up_key_for_character(
+            //window,
+            //position,
+            //character_animation,
+            //animation_positions,
+            //),
+            //}
+            //});
+            //};
+
+            //match screen_state.game_state {
+            //GameState::Active => {
+            //if let Some(position) = positions.get_mut(entity) {
+            //if let Some(_character) = characters.get(entity) {
+            //let _ = character_asset.execute(|character_animation| {
+            //let moving_states = start_moving_state();
+            //move_character(
+            //moving_states,
+            //window,
+            //position,
+            //character_animation,
+            //animation_positions,
+            //);
+
+            //Ok(())
+            //});
+            //}
+            //}
+            //}
+            //_ => {}
+            /*}*/
         });
 
         Ok(())

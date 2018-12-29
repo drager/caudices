@@ -1,7 +1,7 @@
 use character::Character;
-use collision::{self, Collision, CollisionObjectData};
+use collision::{self, Collision, CollisionObjectData, ProximityData};
+use nalgebra::base::Matrix;
 use nalgebra::{Isometry2, Vector2};
-use ncollide2d::events::ProximityEvent;
 use ncollide2d::query::Proximity;
 use ncollide2d::shape::{Cuboid, ShapeHandle};
 use ncollide2d::world::{
@@ -9,16 +9,9 @@ use ncollide2d::world::{
 };
 use quicksilver::geom::Vector;
 use specs::{
-    Component, Entities, Join, LazyUpdate, Read, ReadStorage, Resources, System, VecStorage, Write,
-    WriteStorage,
+    Builder, Component, Entities, Join, LazyUpdate, Read, ReadStorage, Resources, System,
+    VecStorage, Write, WriteStorage,
 };
-
-// my opinion is to have a physics system and a collision system
-//physics system runs first, and whenever a collision occurs it creates an entity that represents that collision
-//then the collision system runs, deals with any collisions, and removes the created entities
-//it's kinda like a signal/event system
-//where each collision is an event that triggers a response from the collision system
-//just store the ID
 
 #[derive(Debug, PartialEq)]
 pub enum MovingState {
@@ -33,8 +26,6 @@ pub struct DeltaTime(pub f32);
 
 impl PhysicsSystem {
     pub fn init_collision_world<'a>() -> Collision {
-        println!("init");
-
         // Collision world 0.02 optimization margin and small object identifiers.
         let collision_world = CollisionWorld::new(0.);
 
@@ -58,7 +49,7 @@ impl PhysicsSystem {
         velocity_storage: &ReadStorage<'a, Velocity>,
         position_storage: &ReadStorage<'a, Position>,
         character_storage: &ReadStorage<'a, Character>,
-    ) -> (Option<Isometry2<f32>>, Option<CollisionObjectHandle>) {
+    ) {
         let isometry_positions = (entities, position_storage)
             .join()
             .map(|(entity, position)| {
@@ -114,7 +105,6 @@ impl PhysicsSystem {
             character_position.get(0).map(|opt| opt.to_owned());
 
         let character_handle = if let Some(ref mut world) = collision.world {
-            println!("char handle");
             let handle = character_position.map(|character_position| {
                 println!("Char pos {:?}", character_position);
                 world.add(
@@ -141,29 +131,16 @@ impl PhysicsSystem {
             None
         };
 
+
         collision.character_position = character_position;
         collision.character_handle = character_handle;
-
-        (character_position, character_handle)
     }
 
-    fn update_collision<'a, 'b>(
+    pub fn update_collision<'a, 'b>(
         position: &Position,
         collision_world: &mut Collision,
-    ) -> Vec<(
-        ProximityEvent,
-        CollisionObject<f32, CollisionObjectData>,
-        String,
-    )> {
+    ) -> Vec<ProximityData> {
         let collision = collision_world.set_character_position(position);
-        /*let (character_position, character_handle) = Self::setup_handles(*/
-        //&mut collision.world,
-        //velocity_storage,
-        //position_storage,
-        //character_storage,
-        //);
-        //println!("Col");
-
         let events = collision
             .character_handle
             .and_then(move |character_handle| {
@@ -180,7 +157,6 @@ impl PhysicsSystem {
                             .collect::<Vec<_>>();
 
                         // Submit the position update to the world.
-
                         world.update();
                         events
                     } else {
@@ -193,7 +169,7 @@ impl PhysicsSystem {
         events
     }
 
-    fn get_start_moving_state() -> Vec<MovingState> {
+    pub fn get_start_moving_state() -> Vec<MovingState> {
         vec![
             MovingState::Left,
             MovingState::Right,
@@ -202,47 +178,54 @@ impl PhysicsSystem {
         ]
     }
 
-    fn calculate_moving_state(collision: CollisionObjectData) -> Vec<MovingState> {
-        if let Some(position) = collision.character_position {
-            let character_x = position.x;
-            let character_y = position.y;
-            let half_size = 35.;
+    pub fn calculate_moving_state(
+        block_position: &Matrix<
+            f32,
+            nalgebra::U2,
+            nalgebra::U1,
+            nalgebra::MatrixArray<f32, nalgebra::U2, nalgebra::U1>,
+        >,
+        character_position: &Position,
+    ) -> Vec<MovingState> {
+        //if let Some(position) = collision.character_position {
+        let character_x = character_position.0.x;
+        let character_y = character_position.0.y;
+        let half_size = 35.;
 
-            if let Some(collision_pos) = collision.position {
-                let collision_x = collision_pos[0];
-                let collision_y = collision_pos[1];
+        //if let Some(collision_pos) = collision.position {
+        let collision_x = block_position.x;
+        let collision_y = block_position.y;
 
-                if (character_x - half_size) <= collision_x
-                    && (character_y - half_size) >= collision_y
-                {
-                    //println!("BOTTOM");
-                    vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
-                } else if (character_x + half_size) >= collision_x
-                    && (character_y + half_size) <= collision_y
-                {
-                    //println!("TOP");
-                    vec![MovingState::Right, MovingState::Left, MovingState::Top]
-                } else if (character_x + half_size) <= collision_x
-                    && (character_y - half_size) <= collision_y
-                {
-                    //println!("LEFT");
-                    vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
-                }
-                // Right side
-                else if (character_x + half_size) >= collision_x
-                    && (character_y + half_size) >= collision_y
-                {
-                    //println!("RIGHT");
-                    vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
-                } else {
-                    Self::get_start_moving_state()
-                }
-            } else {
-                Self::get_start_moving_state()
-            }
-        } else {
-            Self::get_start_moving_state()
+        if (character_x - half_size) <= collision_x && (character_y - half_size) >= collision_y {
+            //println!("BOTTOM");
+            vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
+        } else if (character_x + half_size) >= collision_x
+            && (character_y + half_size) <= collision_y
+        {
+            //println!("TOP");
+            vec![MovingState::Right, MovingState::Left, MovingState::Top]
+        } else if (character_x + half_size) <= collision_x
+            && (character_y - half_size) <= collision_y
+        {
+            //println!("LEFT");
+            vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
         }
+        // Right side
+        else if (character_x + half_size) >= collision_x
+            && (character_y + half_size) >= collision_y
+        {
+            //println!("RIGHT");
+            vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
+        } else {
+            vec![]
+            //Self::get_start_moving_state()
+        }
+        /*} else {*/
+        //Self::get_start_moving_state()
+        /*}*/
+        /*        } else {*/
+        //Self::get_start_moving_state()
+        /*}*/
     }
 }
 
@@ -255,10 +238,12 @@ impl Component for CollisionHandle {
     type Storage = VecStorage<Self>;
 }
 
-#[derive(Debug)]
-pub struct CollisionHandle(CollisionObjectHandle);
-
-pub struct CollisionId(u32);
+//#[derive(Debug)]
+//pub struct CollisionHandle(CollisionObjectHandle);
+pub struct CollisionHandle {
+    pub collision_data: ProximityData,
+    pub character_entity: specs::Entity,
+}
 
 impl<'a> System<'a> for PhysicsSystem {
     type SystemData = (
@@ -267,7 +252,7 @@ impl<'a> System<'a> for PhysicsSystem {
         Write<'a, Collision>,
         ReadStorage<'a, Velocity>,
         ReadStorage<'a, Character>,
-        ReadStorage<'a, Position>,
+        WriteStorage<'a, Position>,
         //WriteStorage<'a, CollisionObjectData>,
         WriteStorage<'a, CollisionHandle>,
         Read<'a, LazyUpdate>,
@@ -276,69 +261,82 @@ impl<'a> System<'a> for PhysicsSystem {
     fn run(&mut self, data: Self::SystemData) {
         let (
             entities,
-            _delta,
+            delta,
             mut collision_world,
             velocity_storage,
             character_storage,
-            position_storage,
+            mut position_storage,
             mut collision_object_data_storage,
-            _updater,
+            updater,
         ) = data;
         //println!("delta {:?}", delta.0);
 
         //let delta = delta.0;
 
-        /*if let None = self.collision_world {*/
-        //let world =
-        //Self::init_collisions(&velocity_storage, &position_storage, &character_storage);
-        //self.collision_world = Some(world);
-        /*}*/
-
         //println!("Got physics world? {:?}", self.collision_world.is_some());
 
-        (&entities, &velocity_storage, &position_storage)
+        (&entities, &velocity_storage, &mut position_storage)
             .join()
-            .for_each(|(entity, _velocity, position)| {
+            .for_each(|(entity, velocity, position)| {
                 //println!("Character phsycis {:?}", position);
-                /*                position.0.x += velocity.x * delta;*/
-                /*position.0.y += velocity.y * delta;*/
-                if let Some(_character) = character_storage.get(entity) {
-                    //println!("Got character {:?}", _character);
-                    //if let Some(ref mut collision_world) = collision_world {
-                    /*if !self.x {*/
-                    //Self::setup_handles(
-                    //&mut collision_world.world,
-                    //&velocity_storage,
-                    //&position_storage,
-                    //&character_storage,
-                    //);
-                    /*}*/
-                    //println!("world");
-
+                /*if let Some(_) = collision_object_data_storage.get(entity) {*/
+                //println!("Got collision");
+                /*} else {*/
+                position.0.x += velocity.x * delta.0;
+                position.0.y += velocity.y * delta.0;
+                //}
+                if let Some(character) = character_storage.get(entity) {
                     let collision_events = Self::update_collision(position, &mut collision_world);
-                    collision_events.iter().for_each(|event| {
-                        match event.0.new_status {
+                    collision_events.into_iter().for_each(|event| {
+                        match event.proximity_event.new_status {
                             Proximity::Intersecting => {
+                                /*                                updater*/
+                                //.create_entity(&entities)
+                                ////.with(character)
+                                ////.with(*velocity)
+                                //.with(CollisionHandle {
+                                //collision_data: event,
+                                //character_entity: entity,
+                                //})
+                                /*.build();*/
+
+                                //let collision_entity = entities.create();
+                                //println!("Event {:?}", event.1);
+                                //
+
+                                //let cid = event.proximity_event.collider2;
+                                //println!("CID {:?}", cid);
                                 let collision_entity = entities.create();
-                                collision_object_data_storage
-                                    .insert(collision_entity, CollisionHandle(event.0.collider2));
+                                println!("Creating collision object");
+                                updater.insert(
+                                    collision_entity,
+                                    CollisionHandle {
+                                        collision_data: event,
+                                        character_entity: entity,
+                                    },
+                                );
                             }
-                            /*Proximity::Disjoint => {*/
-                            //collision_object_data_storage.remove(entity);
-                            /*}*/
+                            Proximity::Disjoint => {
+                                //println!("Disjoint");
+                                //updater.remove::<CollisionHandle>(collision_entity);
+                                /*updater.insert(*/
+                                //collision_entity,
+                                //CollisionHandle {
+                                //collision_data: event,
+                                //character_entity: entity,
+                                //},
+                                /*);*/
+                                //None
+                            }
                             _ => {}
                         };
-                        println!("Got event {:?}", event.0);
+                        //if let Some(obj) = obj {
+
+                        //}
+                        //println!("Got event {:?}", event.0);
                     });
-                    //}
                 }
             });
-
-        //(&velocity_storage, &mut position_storage)
-        //.join()
-        //.for_each(|(velocity, position)| {
-        //println!("others phsycis {:?}", position);
-        /*})*/
     }
 
     //fn setup(&mut self, res: &mut Resources) {
