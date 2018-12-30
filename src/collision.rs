@@ -76,15 +76,14 @@ impl<'a> System<'a> for CollisionSystem {
                             .iter()
                             .filter(|state| !moving_state.contains(state))
                             .collect::<Vec<&MovingState>>();
-                        //println!("Except State {:?}", cant_move_at_states)/*;*/
-                        /*cant_move_at_states.iter().for_each(|cant_move_at_state| {*/
-                            //match cant_move_at_state {
-                                //MovingState::Left => velocity.x = velocity.x.max(0.),
-                                //MovingState::Right => velocity.x = velocity.x.min(0.),
-                                //MovingState::Top => velocity.y = velocity.y.max(0.),
-                                //MovingState::Bottom => velocity.y = velocity.y.min(0.),
-                            //}
-                        /*});*/
+                        cant_move_at_states.iter().for_each(|cant_move_at_state| {
+                            match cant_move_at_state {
+                                MovingState::Left => velocity.x = velocity.x.max(0.),
+                                MovingState::Right => velocity.x = velocity.x.min(0.),
+                                MovingState::Top => velocity.y = velocity.y.max(0.),
+                                MovingState::Bottom => velocity.y = velocity.y.min(0.),
+                            }
+                        });
 
                         Some(entity)
                     } else {
@@ -103,6 +102,7 @@ impl<'a> System<'a> for CollisionSystem {
         x.iter().for_each(|e| {
             if let Some(data) = collision_objects.get(*e) {
                 if let Some(character_position) = position_storage.get(data.character_entity) {
+                    let has_changed = PhysicsSystem::has_changed(data.collision_data.proximity_event, &mut collision_world);
                     /*let new_collisions =*/
                         //PhysicsSystem::update_collision(character_position, &mut collision_world);
 
@@ -117,7 +117,8 @@ impl<'a> System<'a> for CollisionSystem {
                         //}
                     /*});*/
                     //println!("Data {:?}", data.collision_data.proximity_event);
-                    if data.collision_data.proximity_event.new_status == Proximity::Disjoint {
+                    //if data.collision_data.proximity_event.new_status == Proximity::Disjoint {
+                    if has_changed {
                         println!("Removing E {:?}", e);
                         _updater.remove::<CollisionHandle>(*e);
                     }

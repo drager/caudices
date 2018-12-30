@@ -2,8 +2,9 @@ use character::Character;
 use collision::{self, Collision, CollisionObjectData, ProximityData};
 use nalgebra::base::Matrix;
 use nalgebra::{Isometry2, Vector2};
+use ncollide2d::events::ProximityEvent;
 use ncollide2d::query::Proximity;
-use ncollide2d::shape::{Cuboid, ShapeHandle};
+use ncollide2d::shape::{Cuboid, ShapeHandle, Ball};
 use ncollide2d::world::{
     CollisionGroups, CollisionObject, CollisionObjectHandle, CollisionWorld, GeometricQueryType,
 };
@@ -27,7 +28,7 @@ pub struct DeltaTime(pub f32);
 impl PhysicsSystem {
     pub fn init_collision_world<'a>() -> Collision {
         // Collision world 0.02 optimization margin and small object identifiers.
-        let collision_world = CollisionWorld::new(0.);
+        let collision_world = CollisionWorld::new(0.02);
 
         //let (character_position, character_handle) = Self::setup_handles(
         //&mut collision_world,
@@ -99,7 +100,8 @@ impl PhysicsSystem {
 
         // TODO: When Capsule implements Shape we should use it instead of a Cuboid.
         // https://github.com/rustsim/ncollide/issues/175
-        let character = ShapeHandle::new(Cuboid::new(Vector2::new(15.0, 11.0)));
+        let character = ShapeHandle::new(Cuboid::new(Vector2::new(17.0, 11.0)));
+//let capsule = ShapeHandle::new(Ball::new(0.5f32), Ball::new(0.5f32));
 
         let character_position: Option<Isometry2<f32>> =
             character_position.get(0).map(|opt| opt.to_owned());
@@ -131,9 +133,28 @@ impl PhysicsSystem {
             None
         };
 
-
         collision.character_position = character_position;
         collision.character_handle = character_handle;
+    }
+
+    pub fn has_changed<'a>(
+        proximity_event: ProximityEvent,
+        collision_world: &mut Collision,
+    ) -> bool {
+        if let Some(ref w) = collision_world.world {
+            let old_event = w
+                .proximity_events()
+                .iter()
+                .find(|event| event.collider2.0 == proximity_event.collider2.0);
+            if old_event.is_some() && proximity_event.new_status != old_event.unwrap().new_status {
+                println!("CHANGED {:?}", old_event);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 
     pub fn update_collision<'a, 'b>(
@@ -195,26 +216,30 @@ impl PhysicsSystem {
         //if let Some(collision_pos) = collision.position {
         let collision_x = block_position.x;
         let collision_y = block_position.y;
+/*        println!("char X {:?}", character_x);*/
+        //println!("char Y {:?}", character_y);
+        //println!("Col X {:?}", collision_x);
+        /*println!("Col Y {:?}", collision_y);*/
 
         if (character_x - half_size) <= collision_x && (character_y - half_size) >= collision_y {
-            //println!("BOTTOM");
+            println!("BOTTOM");
             vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
         } else if (character_x + half_size) >= collision_x
             && (character_y + half_size) <= collision_y
         {
-            //println!("TOP");
+            println!("TOP");
             vec![MovingState::Right, MovingState::Left, MovingState::Top]
         } else if (character_x + half_size) <= collision_x
             && (character_y - half_size) <= collision_y
         {
-            //println!("LEFT");
+            println!("LEFT");
             vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
         }
         // Right side
         else if (character_x + half_size) >= collision_x
             && (character_y + half_size) >= collision_y
         {
-            //println!("RIGHT");
+            println!("RIGHT");
             vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
         } else {
             vec![]
@@ -316,18 +341,25 @@ impl<'a> System<'a> for PhysicsSystem {
                                     },
                                 );
                             }
-                            Proximity::Disjoint => {
-                                //println!("Disjoint");
-                                //updater.remove::<CollisionHandle>(collision_entity);
-                                /*updater.insert(*/
-                                //collision_entity,
-                                //CollisionHandle {
-                                //collision_data: event,
-                                //character_entity: entity,
-                                //},
-                                /*);*/
-                                //None
-                            }
+                            /*Proximity::Disjoint => {*/
+                            //println!("Disjoint");
+                            //updater.insert(
+                            //collision_entity,
+                            //CollisionHandle {
+                            //collision_data: event,
+                            //character_entity: entity,
+                            //},
+                            //);
+                            ////updater.remove::<CollisionHandle>(collision_entity);
+                            //[>updater.insert(<]
+                            ////collision_entity,
+                            ////CollisionHandle {
+                            ////collision_data: event,
+                            ////character_entity: entity,
+                            ////},
+                            //[>);<]
+                            ////None
+                            /*}*/
                             _ => {}
                         };
                         //if let Some(obj) = obj {

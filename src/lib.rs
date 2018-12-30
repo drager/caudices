@@ -412,11 +412,8 @@ impl State for Screen<'static> {
 
         world.add_resource(DeltaTime(10.0));
         world.add_resource(collisions);
-        /*world.register::<Position>();*/
-        /*world.register::<Velocity>();*/
-        world.register::<Character>();
-        world.register::<CollisionObjectData>();
-        let mut physics_system = PhysicsSystem {
+
+        let physics_system = PhysicsSystem {
             collision_world: None,
             x: false,
         };
@@ -433,7 +430,6 @@ impl State for Screen<'static> {
 
         dispatcher.setup(&mut world.res);
 
-        // TODO: One approach might be to move these before we create the dispatcher.
         world
             .create_entity()
             .with(Velocity { x: 0., y: 0. })
@@ -453,6 +449,8 @@ impl State for Screen<'static> {
             .with(Block::default())
             .build();
 
+        //create_base_map_entities(&mut world, &settings)?;
+
         dispatcher.dispatch(&world.res);
 
         world.maintain();
@@ -465,7 +463,6 @@ impl State for Screen<'static> {
             &world.read_storage::<Character>(),
         );
 
-        //create_base_map_entities(&mut world, &settings)?;
 
         let mali_font = Screen::load_fonts(&settings);
         let block_asset = Screen::load_block_asset(&settings);
