@@ -463,7 +463,6 @@ impl State for Screen<'static> {
             &world.read_storage::<Character>(),
         );
 
-
         let mali_font = Screen::load_fonts(&settings);
         let block_asset = Screen::load_block_asset(&settings);
         let character_asset = Screen::load_character_asset(animation_positions, &settings);
