@@ -687,10 +687,14 @@ impl State for Screen<'static> {
          -> Result<()> {
             if let Some(position) = positions.get(entity) {
                 if let Some(_character) = characters.get(entity) {
-                    character_asset.execute(|character_image| {
-                        Screen::draw_character(window, position, character_image)?;
+                    block_asset.execute(|image| {
+                        window.draw(&image.area().with_center(position.0), Img(&image));
                         Ok(())
-                    })?;
+                    });
+                    /* character_asset.execute(|character_image| {*/
+                    //Screen::draw_character(window, position, character_image)?;
+                    //Ok(())
+                    /*})?;*/
                 }
             }
 

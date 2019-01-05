@@ -20,16 +20,29 @@ impl Component for CollisionObjectData {
 pub fn moving_state_from_collision_normal(
     collision_normal: &CollisionNormal,
 ) -> Option<MovingState> {
-    if collision_normal.x == -1. && collision_normal.y == 0. {
-        Some(MovingState::Left)
-    } else if collision_normal.x == 1. && collision_normal.y == -0. {
-        Some(MovingState::Right)
-    } else if collision_normal.x == 0. && collision_normal.y == -1. {
-        Some(MovingState::Top)
-    } else if collision_normal.x == 0. && collision_normal.y == 1. {
-        Some(MovingState::Bottom)
+    //println!("Surface area {:?}", surface_area);
+    if collision_normal.x.abs() > collision_normal.y.abs() {
+        if collision_normal.x > 0. {
+            Some(MovingState::Right)
+        } else {
+            Some(MovingState::Left)
+        }
     } else {
-        None
+        //println!("Normal {:?}", collision_normal);
+        if collision_normal.y > 0. {
+            Some(MovingState::Bottom)
+        } else {
+            Some(MovingState::Top)
+        }
+    }
+}
+
+pub fn change_velocity(moving_state: &MovingState, velocity: &mut Velocity) {
+    match moving_state {
+        MovingState::Left => velocity.x = velocity.x.max(0.),
+        MovingState::Right => velocity.x = velocity.x.min(0.),
+        MovingState::Top => velocity.y = velocity.y.max(0.),
+        MovingState::Bottom => velocity.y = velocity.y.min(0.),
     }
 }
 
@@ -71,20 +84,33 @@ impl<'a> System<'a> for CollisionSystem {
                             .translation
                             .vector;
 
-                        collision_data
-                            .collision_data
-                            .collision_normals
+                        let surface_area = (block_position.x + 25.)
+                            .min(character_position.0.x + 20.)
+                            - (block_position.x).max(character_position.0.x);
+
+                        //println!("Surface area {:?}", surface_area);
+
+                        let collision_normals = &collision_data.collision_data.collision_normals;
+
+                        //println!("normals {:?}", collision_normals.len());
+                        /*if let Some(collision_normal) =*/
+                        //collision_data.collision_data.collision_normal
+                        //{
+                        //let moving_state =
+                        //moving_state_from_collision_normal(&collision_normal);
+
+                        //if let Some(moving_state) = moving_state {
+                        //change_velocity(&moving_state, velocity);
+                        //}
+                        /*}*/
+
+                        collision_normals
                             .iter()
                             .map(|collision_normal| {
-                                moving_state_from_collision_normal(collision_normal)
+                                moving_state_from_collision_normal(&collision_normal.0)
                             })
                             .filter_map(|moving_state_opt| moving_state_opt)
-                            .for_each(|moving_state| match moving_state {
-                                MovingState::Left => velocity.x = velocity.x.max(0.),
-                                MovingState::Right => velocity.x = velocity.x.min(0.),
-                                MovingState::Top => velocity.y = velocity.y.max(0.),
-                                MovingState::Bottom => velocity.y = velocity.y.min(0.),
-                            });
+                            .for_each(|moving_state| change_velocity(&moving_state, velocity));
 
                         Some(entity)
                     } else {

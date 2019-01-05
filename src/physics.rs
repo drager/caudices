@@ -14,12 +14,19 @@ use specs::{
     VecStorage, Write, WriteStorage,
 };
 
-pub type CollisionNormal =  nalgebra::Unit<nalgebra::Matrix<f32, nalgebra::U2, nalgebra::U1, nalgebra::MatrixArray<f32, nalgebra::U2, nalgebra::U1>>>;
+pub type CollisionNormal = nalgebra::Unit<
+    nalgebra::Matrix<
+        f32,
+        nalgebra::U2,
+        nalgebra::U1,
+        nalgebra::MatrixArray<f32, nalgebra::U2, nalgebra::U1>,
+    >,
+>;
 
 pub struct ProximityData {
     pub proximity_event: ContactEvent,
     pub collision_object: CollisionObject<f32, CollisionObjectData>,
-    pub collision_normals: Vec<CollisionNormal>
+    pub collision_normals: Vec<(CollisionNormal, f32)>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -92,18 +99,33 @@ impl PhysicsSystem {
             .map(|c| {
                 //println!("COLLECTOR {:?}", c.deepest_contact());
                 let deepest_contact = c.deepest_contact().unwrap();
-                let n = co1.position().inverse() * deepest_contact.contact.normal;
+                let local_space = co1.position().inverse() * deepest_contact.contact.normal;
                 let f1 = deepest_contact.kinematic.feature1();
-                println!("NN {:?}", n);
-                println!("f1 {:?}", f1);
-                n
+                println!("Normal {:?}", local_space);
+                println!("Feature 1 {:?}", f1);
+                println!("depth {:?}", deepest_contact.contact.depth);
+                println!("Feature 2 {:?}", deepest_contact.kinematic.feature2());
+                println!("pos in handle {:?}", co1.position());
+                let co1_pos = co1.position().translation.vector;
+                let co2_pos = co2.position().translation.vector;
+
+                let surface_area =
+                    (co1_pos.x + 25.).min(co2_pos.x + 7.) - (co1_pos.x).max(co2_pos.x);
+
+                let surface_area2 =
+                    (co1_pos.y + 25.).min(co2_pos.y + 7.) - (co1_pos.y).max(co2_pos.y);
+
+                /*println!("Surface {:?}", surface_area);*/
+                //println!("Surface 2 {:?}", surface_area2);
+
+                (local_space, surface_area2)
             })
-            .collect::<Vec<CollisionNormal>>();
+            .collect::<Vec<(CollisionNormal, f32)>>();
 
         ProximityData {
             proximity_event: *event,
             collision_object: co3,
-            collision_normals
+            collision_normals,
         }
     }
 
@@ -157,12 +179,24 @@ impl PhysicsSystem {
         let character_data =
             CollisionObjectData::new("character", Some(Vector2::new(32.0, 12.0)), None, None);
 
-        let contacts_query = GeometricQueryType::Contacts(0.0, 0.0);
-        let rect = ShapeHandle::new(Cuboid::new(Vector2::new(25.0f32, 25.0)));
+        // TODO: We should get the size from settings somewhere and then just divide it by 2.
+        let margin = 2.0;
+        let rect_half_extent = 25.0 - margin;
+        let character_half_extent_width = 25.0 - margin;
+        let character_half_extent_height = 25.0 - margin;
+
+        let contacts_query = GeometricQueryType::Contacts(margin, 0.);
+        let rect = ShapeHandle::new(Cuboid::new(Vector2::new(
+            rect_half_extent,
+            rect_half_extent,
+        )));
 
         // TODO: When Capsule implements Shape we should use it instead of a Cuboid.
         // https://github.com/rustsim/ncollide/issues/175
-        let character = ShapeHandle::new(Cuboid::new(Vector2::new(17.0, 11.0)));
+        let character = ShapeHandle::new(Cuboid::new(Vector2::new(
+            character_half_extent_width,
+            character_half_extent_height,
+        )));
         /*        let character = ShapeHandle::new(Compound::new(vec![*/
         //(
         //Isometry2::new(Vector2::new(32.0, 12.0), nalgebra::zero()),
@@ -214,7 +248,8 @@ impl PhysicsSystem {
                 ContactEvent::Started(_, co2) => co2,
                 ContactEvent::Stopped(_, co2) => co2,
             };
-            world.contact_events()
+            world
+                .contact_events()
                 .iter()
                 .find(|event| match event {
                     ContactEvent::Started(_, old_co2) => old_co2.0 == co2.0,
