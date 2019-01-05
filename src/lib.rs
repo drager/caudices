@@ -149,78 +149,46 @@ impl<'a> Screen<'a> {
             .collect::<Vec<Result<_>>>()
     }
 
-    fn handle_right_key_for_character<'b>(
-        window: &mut Window,
-        position: &mut Position,
+    fn tick_character_animation(
+        current_frame_area: &Rectangle,
+        start_position: Option<&CharacterPosition>,
+        moving_position: Option<&CharacterPosition>,
         character_animation: &mut Animation,
-        animation_positions: &Vec<CharacterPosition>,
     ) {
-        Self::handle_key_for_character(
-            position,
-            character_animation,
-            animation_positions,
-            &window.keyboard()[Key::Right],
-            // TODO: Get position increament from settings.
-            |position| position.0.x += 1.,
-        );
+        let tick_animation =
+            |x: &f32, rectangle: &Rectangle, character_animation: &mut Animation| {
+                if x == &rectangle.pos.x {
+                    character_animation.tick();
+                    //log("Animation ticking...");
+                }
+            };
+        match current_frame_area {
+            Rectangle {
+                pos: Vector { x, .. },
+                ..
+            } => {
+                if let Some(start_position) = start_position {
+                    if let CharacterPosition::Start(rectangle) = start_position {
+                        tick_animation(x, rectangle, character_animation);
+                    }
+                }
+                if let Some(moving_position) = moving_position {
+                    if let CharacterPosition::Moving(rectangle) = moving_position {
+                        tick_animation(x, rectangle, character_animation);
+                    }
+                }
+            }
+        }
     }
 
-    fn handle_left_key_for_character<'b>(
+    fn handle_keys_to_change_velocity(
+        velocity: &mut Velocity,
         window: &mut Window,
-        position: &mut Position,
         character_animation: &mut Animation,
         animation_positions: &Vec<CharacterPosition>,
-    ) {
-        Self::handle_key_for_character(
-            position,
-            character_animation,
-            animation_positions,
-            &window.keyboard()[Key::Left],
-            // TODO: Get position increament from settings.
-            |position| position.0.x -= 1.,
-        );
-    }
-
-    fn handle_down_key_for_character<'b>(
-        window: &mut Window,
-        position: &mut Position,
-        character_animation: &mut Animation,
-        animation_positions: &Vec<CharacterPosition>,
-    ) {
-        Self::handle_key_for_character(
-            position,
-            character_animation,
-            animation_positions,
-            &window.keyboard()[Key::Down],
-            // TODO: Get position increament from settings.
-            |position| position.0.y += 1.,
-        );
-    }
-
-    fn handle_up_key_for_character<'b>(
-        window: &mut Window,
-        position: &mut Position,
-        character_animation: &mut Animation,
-        animation_positions: &Vec<CharacterPosition>,
-    ) {
-        Self::handle_key_for_character(
-            position,
-            character_animation,
-            animation_positions,
-            &window.keyboard()[Key::Up],
-            // TODO: Get position increament from settings.
-            |position| position.0.y -= 1.0,
-        );
-    }
-
-    fn handle_key_for_character<'b, P: FnOnce(&mut Position) -> ()>(
-        position: &mut Position,
-        character_animation: &mut Animation,
-        animation_positions: &Vec<CharacterPosition>,
-        key_state: &ButtonState,
-        position_changer: P,
     ) {
         let mut animation_positions_iter = animation_positions.into_iter();
+
         let start_position = animation_positions_iter.find(|pos| match pos {
             CharacterPosition::Start(_) => true,
             _ => false,
@@ -232,45 +200,53 @@ impl<'a> Screen<'a> {
 
         let current_frame_area = character_animation.current_frame().area();
 
-        match key_state {
-            ButtonState::Pressed | ButtonState::Held => {
-                position_changer(position);
-                //log(&format!("{:?}", current_frame_area));
-                match current_frame_area {
-                    Rectangle {
-                        pos: Vector { x, .. },
-                        ..
-                    } => {
-                        if let Some(start_position) = start_position {
-                            if let CharacterPosition::Start(rectangle) = start_position {
-                                if x == rectangle.pos.x {
-                                    character_animation.tick();
-
-                                    //log("Animation ticking...");
-                                }
-                            }
-                        }
-                    }
+        let mut key_match =
+            |key: Key,
+             on_press: Box<Fn(&mut Velocity) -> ()>,
+             on_release: Box<Fn(&mut Velocity) -> ()>| match window.keyboard()[key] {
+                ButtonState::Pressed | ButtonState::Held => {
+                    on_press(velocity);
+                    Self::tick_character_animation(
+                        &current_frame_area,
+                        start_position,
+                        None,
+                        character_animation,
+                    );
                 }
-            }
-            ButtonState::Released => match current_frame_area {
-                Rectangle {
-                    pos: Vector { x, .. },
-                    ..
-                } => {
-                    if let Some(moving_position) = moving_position {
-                        if let CharacterPosition::Moving(rectangle) = moving_position {
-                            if x == rectangle.pos.x {
-                                character_animation.tick();
-
-                                //log("Animation ticking for moving...");
-                            }
-                        }
-                    }
+                ButtonState::Released => {
+                    on_release(velocity);
+                    Self::tick_character_animation(
+                        &current_frame_area,
+                        None,
+                        moving_position,
+                        character_animation,
+                    );
                 }
-            },
-            _ => {}
-        }
+                ButtonState::NotPressed => {}
+            };
+
+        let velocity_change = 0.1;
+
+        key_match(
+            Key::Up,
+            Box::new(move |velocity| velocity.y = -velocity_change),
+            Box::new(|velocity| velocity.y = velocity.y.max(0.)),
+        );
+        key_match(
+            Key::Down,
+            Box::new(move |velocity| velocity.y = velocity_change),
+            Box::new(|velocity| velocity.y = velocity.y.min(0.)),
+        );
+        key_match(
+            Key::Left,
+            Box::new(move |velocity| velocity.x = -velocity_change),
+            Box::new(|velocity| velocity.x = velocity.x.max(0.)),
+        );
+        key_match(
+            Key::Right,
+            Box::new(move |velocity| velocity.x = velocity_change),
+            Box::new(|velocity| velocity.x = velocity.x.min(0.)),
+        );
     }
 
     fn load_fonts(settings: &Settings) -> Asset<Font> {
@@ -483,53 +459,12 @@ impl State for Screen<'static> {
         let mut screen_state = self.world.write_resource::<ScreenState>();
         let characters = self.world.read_storage::<Character>();
         let stages = self.world.read_storage::<Stage>();
-        let mut positions = self.world.write_storage::<Position>();
         let mut velocity_storage = self.world.write_storage::<Velocity>();
         let entities = self.world.entities();
 
         let character_asset = &mut self.game_asset.character_asset;
         let animation_positions = &self.settings.animation_positions;
         let time_elapsed = self.time_elapsed;
-
-        let handle_keys = |velocity: &mut Velocity| {
-            let mut key_match =
-                |key: Key,
-                 on_press: Box<Fn(&mut Velocity) -> ()>,
-                 on_release: Box<Fn(&mut Velocity) -> ()>| match window.keyboard()
-                    [key]
-                {
-                    ButtonState::Pressed | ButtonState::Held => {
-                        on_press(velocity);
-                    }
-                    ButtonState::Released => {
-                        on_release(velocity);
-                    }
-                    ButtonState::NotPressed => {}
-                };
-
-            let velocity_change = 0.1;
-
-            key_match(
-                Key::Up,
-                Box::new(move |velocity| velocity.y = -velocity_change),
-                Box::new(|velocity| velocity.y = 0.),
-            );
-            key_match(
-                Key::Down,
-                Box::new(move |velocity| velocity.y = velocity_change),
-                Box::new(|velocity| velocity.y = 0.),
-            );
-            key_match(
-                Key::Left,
-                Box::new(move |velocity| velocity.x = -velocity_change),
-                Box::new(|velocity| velocity.x = 0.),
-            );
-            key_match(
-                Key::Right,
-                Box::new(move |velocity| velocity.x = velocity_change),
-                Box::new(|velocity| velocity.x = 0.),
-            );
-        };
 
         entities.join().for_each(|entity| {
             if let Some(stage) = stages.get(entity) {
@@ -546,78 +481,17 @@ impl State for Screen<'static> {
 
             if let Some(_character) = characters.get(entity) {
                 if let Some(velocity) = velocity_storage.get_mut(entity) {
-                    handle_keys(velocity);
+                    let _ = character_asset.execute(|character_animation| {
+                        Screen::handle_keys_to_change_velocity(
+                            velocity,
+                            window,
+                            character_animation,
+                            animation_positions,
+                        );
+                        Ok(())
+                    });
                 }
             }
-
-            /*let start_moving_state = || {*/
-            //vec![
-            //MovingState::Left,
-            //MovingState::Right,
-            //MovingState::Top,
-            //MovingState::Bottom,
-            //]
-            //};
-
-            //// TODO: Move this logic elsewhere[>.*
-            //let move_character =
-            //|moving_states: Vec<_>,
-            //window: &mut Window,
-            //position: &mut Position,
-            //character_animation: &mut Animation,
-            //animation_positions: &Vec<CharacterPosition>| {
-            //moving_states.iter().for_each(|moving_state| {
-            ////println!("Moving state {:?}", moving_state);
-            //match moving_state {
-            //MovingState::Bottom => Screen::handle_down_key_for_character(
-            //window,
-            //position,
-            //character_animation,
-            //animation_positions,
-            //),
-            //MovingState::Left => Screen::handle_left_key_for_character(
-            //window,
-            //position,
-            //character_animation,
-            //animation_positions,
-            //),
-            //MovingState::Right => Screen::handle_right_key_for_character(
-            //window,
-            //position,
-            //character_animation,
-            //animation_positions,
-            //),
-            //MovingState::Top => Screen::handle_up_key_for_character(
-            //window,
-            //position,
-            //character_animation,
-            //animation_positions,
-            //),
-            //}
-            //});
-            //};
-
-            //match screen_state.game_state {
-            //GameState::Active => {
-            //if let Some(position) = positions.get_mut(entity) {
-            //if let Some(_character) = characters.get(entity) {
-            //let _ = character_asset.execute(|character_animation| {
-            //let moving_states = start_moving_state();
-            //move_character(
-            //moving_states,
-            //window,
-            //position,
-            //character_animation,
-            //animation_positions,
-            //);
-
-            //Ok(())
-            //});
-            //}
-            //}
-            //}
-            //_ => {}
-            /*}*/
         });
 
         Ok(())
@@ -628,7 +502,6 @@ impl State for Screen<'static> {
         //log(&format!("Fps: {}", window.average_fps()));
 
         let world = &mut self.world;
-        //let mut collision_world = self.collision_world;
         let entities = world.entities();
         let characters = world.read_storage::<Character>();
         let screen_state = world.write_resource::<ScreenState>();
@@ -668,14 +541,14 @@ impl State for Screen<'static> {
          -> Result<()> {
             if let Some(position) = positions.get(entity) {
                 if let Some(_character) = characters.get(entity) {
-                    block_asset.execute(|image| {
-                        window.draw(&image.area().with_center(position.0), Img(&image));
-                        Ok(())
-                    });
-                    /* character_asset.execute(|character_image| {*/
-                    //Screen::draw_character(window, position, character_image)?;
+                    /*                    block_asset.execute(|image| {*/
+                    //window.draw(&image.area().with_center(position.0), Img(&image));
                     //Ok(())
-                    /*})?;*/
+                    /*});*/
+                    character_asset.execute(|character_image| {
+                        Screen::draw_character(window, position, character_image)?;
+                        Ok(())
+                    })?;
                 }
             }
 
