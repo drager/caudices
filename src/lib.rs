@@ -25,17 +25,15 @@ mod stages;
 mod utils;
 
 use character::{Character, CharacterPosition};
-use collision::{Collision, CollisionObjectData, CollisionSystem};
+use collision::{Collision, CollisionSystem};
 use futures::future;
-use nalgebra::Vector2;
-use physics::{DeltaTime, MovingState, PhysicsSystem, Position, Velocity};
+use physics::{DeltaTime, PhysicsSystem, Position, Velocity};
 //use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
-use ncollide2d::query::Proximity;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
-    input::{ButtonState, Key, Keyboard},
+    input::{ButtonState, Key},
     lifecycle::{run, Asset, Settings as QuickSilverSettings, State, Window},
     load_file, Future, Result,
 };
@@ -92,7 +90,6 @@ pub struct Screen<'a> {
     time_elapsed: Duration,
     settings: Settings,
     game_asset: GameAsset,
-    collision_world: Option<collision::Collision>,
     dispatcher: Dispatcher<'a, 'a>,
 }
 
@@ -413,18 +410,10 @@ impl State for Screen<'static> {
         world.add_resource(DeltaTime(10.0));
         world.add_resource(collisions);
 
-        let physics_system = PhysicsSystem {
-            collision_world: None,
-            x: false,
-        };
-
-        //let collision_world = physics_system.init_collision_world();
-        //physics_system.collision_world = Some(collision_world);
-
         let mut dispatcher: Dispatcher = DispatcherBuilder::new()
             .with(StageCreator, "stage_creator", &[])
             .with(CollisionSystem, "collision_system", &[])
-            .with(physics_system, "physics_system", &["collision_system"])
+            .with(PhysicsSystem, "physics_system", &["collision_system"])
             .with(BlockSystem, "block_system", &[])
             .build();
 
@@ -474,20 +463,12 @@ impl State for Screen<'static> {
             character_asset,
             stages,
         };
-        /*let collision_world = physics_system.init_collision_world(*/
-        //&world.read_storage::<Velocity>(),
-        //&world.read_storage::<Position>(),
-        //&world.read_storage::<Character>(),
-        //);
-        //
 
         let screen = Screen {
             world,
             time_elapsed: Duration::new(0, 0),
             settings,
             game_asset,
-            collision_world: None,
-            //collision_world: Some(collision_world),
             dispatcher,
         };
 

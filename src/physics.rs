@@ -1,17 +1,13 @@
 use character::Character;
-use collision::{self, Collision, CollisionObjectData};
-use nalgebra::base::Matrix;
+use collision::{Collision, CollisionObjectData};
 use nalgebra::{Isometry2, Vector2};
-use ncollide2d::events::{ContactEvent, ProximityEvent};
-use ncollide2d::query::Proximity;
-use ncollide2d::shape::{Ball, Compound, Cuboid, ShapeHandle};
-use ncollide2d::world::{
-    CollisionGroups, CollisionObject, CollisionObjectHandle, CollisionWorld, GeometricQueryType,
-};
+use ncollide2d::events::ContactEvent;
+use ncollide2d::shape::{Cuboid, ShapeHandle};
+use ncollide2d::world::{CollisionGroups, CollisionObject, CollisionWorld, GeometricQueryType};
 use quicksilver::geom::Vector;
 use specs::{
-    Builder, Component, Entities, Join, LazyUpdate, Read, ReadStorage, Resources, System,
-    VecStorage, Write, WriteStorage,
+    Component, Entities, Join, LazyUpdate, Read, ReadStorage, System, VecStorage, Write,
+    WriteStorage,
 };
 
 pub type CollisionNormal = nalgebra::Unit<
@@ -19,14 +15,14 @@ pub type CollisionNormal = nalgebra::Unit<
         f32,
         nalgebra::U2,
         nalgebra::U1,
-        nalgebra::MatrixArray<f32, nalgebra::U2, nalgebra::U1>,
+        nalgebra::ArrayStorage<f32, nalgebra::U2, nalgebra::U1>,
     >,
 >;
 
-pub struct ProximityData {
-    pub proximity_event: ContactEvent,
+pub struct ContactData {
+    pub contact_event: ContactEvent,
     pub collision_object: CollisionObject<f32, CollisionObjectData>,
-    pub collision_normals: Vec<(CollisionNormal, f32)>,
+    pub collision_normals: Vec<CollisionNormal>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,15 +38,7 @@ pub struct DeltaTime(pub f32);
 
 impl PhysicsSystem {
     pub fn init_collision_world<'a>() -> Collision {
-        // Collision world 0.02 optimization margin and small object identifiers.
         let collision_world = CollisionWorld::new(0.);
-
-        //let (character_position, character_handle) = Self::setup_handles(
-        //&mut collision_world,
-        //velocity_storage,
-        //position_storage,
-        //character_storage,
-        /*);*/
 
         Collision {
             world: Some(collision_world),
@@ -59,72 +47,72 @@ impl PhysicsSystem {
         }
     }
 
-    pub fn handle_proximity_event<'a, 'b>(
+    pub fn handle_contact_event<'a, 'b>(
         collision_world: &'a CollisionWorld<f32, CollisionObjectData>,
         event: &'a ContactEvent,
-    ) -> ProximityData {
-        //println!("handle proximity");
-
-        let (co1, co2) = match event {
-            ContactEvent::Started(co1, co2) => (
-                collision_world.collision_object(*co1).unwrap(),
-                collision_world.collision_object(*co2).unwrap(),
+    ) -> ContactData {
+        let (first_collision_object, second_collision_object) = match event {
+            ContactEvent::Started(first_collision_object, second_collision_object) => (
+                collision_world
+                    .collision_object(*first_collision_object)
+                    .unwrap(),
+                collision_world
+                    .collision_object(*second_collision_object)
+                    .unwrap(),
             ),
-            ContactEvent::Stopped(co1, co2) => (
-                collision_world.collision_object(*co1).unwrap(),
-                collision_world.collision_object(*co2).unwrap(),
+            ContactEvent::Stopped(first_collision_object, second_collision_object) => (
+                collision_world
+                    .collision_object(*first_collision_object)
+                    .unwrap(),
+                collision_world
+                    .collision_object(*second_collision_object)
+                    .unwrap(),
             ),
         };
-        //let co1 = collision_world.collision_object(event.collider1).unwrap();
-        //let co2 = collision_world.collision_object(event.collider2).unwrap();
 
-        // TODO: This shouldn't be needed to do. A reference should be able to return.
-        let co3 = CollisionObject::new(
-            co2.handle(),
-            co2.proxy_handle(),
-            co2.position().clone(),
-            co2.shape().clone(),
-            co2.collision_groups().clone(),
-            co2.query_type(),
-            co2.data().clone(),
+        // TODO: This shouldn't be needed to do. A reference should be able to be returned.
+        let second_collision_object_clone = CollisionObject::new(
+            second_collision_object.handle(),
+            second_collision_object.proxy_handle(),
+            second_collision_object.position().clone(),
+            second_collision_object.shape().clone(),
+            second_collision_object.collision_groups().clone(),
+            second_collision_object.query_type(),
+            second_collision_object.data().clone(),
         );
 
         let mut collector = vec![];
         collision_world
-            .contact_pair(co1.handle(), co3.handle())
-            .map(|a| a.contacts(&mut collector));
+            .contact_pair(
+                first_collision_object.handle(),
+                second_collision_object.handle(),
+            )
+            .map(|contact_manifold_generator| contact_manifold_generator.contacts(&mut collector));
 
         let collision_normals = collector
             .iter()
-            .map(|c| {
-                //println!("COLLECTOR {:?}", c.deepest_contact());
-                let deepest_contact = c.deepest_contact().unwrap();
-                let local_space = co1.position().inverse() * deepest_contact.contact.normal;
-                let f1 = deepest_contact.kinematic.feature1();
-                println!("Normal {:?}", local_space);
-                println!("Feature 1 {:?}", f1);
+            .map(|contact_manifold| {
+                let deepest_contact = contact_manifold.deepest_contact().unwrap();
+                let contact_normal =
+                    first_collision_object.position().inverse() * deepest_contact.contact.normal;
+                let feature_1 = deepest_contact.kinematic.feature1();
+
+                println!("Normal {:?}", contact_normal);
+                println!("Feature 1 {:?}", feature_1);
                 println!("depth {:?}", deepest_contact.contact.depth);
                 println!("Feature 2 {:?}", deepest_contact.kinematic.feature2());
-                println!("pos in handle {:?}", co1.position());
-                let co1_pos = co1.position().translation.vector;
-                let co2_pos = co2.position().translation.vector;
+                println!("pos in handle {:?}", first_collision_object.position());
 
-                let surface_area =
-                    (co1_pos.x + 25.).min(co2_pos.x + 7.) - (co1_pos.x).max(co2_pos.x);
+                let _co1_pos = first_collision_object.position().translation.vector;
+                let _co2_pos = second_collision_object.position().translation.vector;
 
-                let surface_area2 =
-                    (co1_pos.y + 25.).min(co2_pos.y + 7.) - (co1_pos.y).max(co2_pos.y);
-
-                /*println!("Surface {:?}", surface_area);*/
-                //println!("Surface 2 {:?}", surface_area2);
-
-                (local_space, surface_area2)
+                contact_normal
             })
-            .collect::<Vec<(CollisionNormal, f32)>>();
+            .collect::<Vec<CollisionNormal>>();
 
-        ProximityData {
-            proximity_event: *event,
-            collision_object: co3,
+        ContactData {
+            contact_event: *event,
+            collision_object: second_collision_object_clone,
             collision_normals,
         }
     }
@@ -175,9 +163,8 @@ impl PhysicsSystem {
         others_groups.set_membership(&[2]);
         others_groups.set_whitelist(&[1]);
 
-        let rect_data_purple = CollisionObjectData::new("purple", None, None, None);
-        let character_data =
-            CollisionObjectData::new("character", Some(Vector2::new(32.0, 12.0)), None, None);
+        let rect_data = CollisionObjectData::new("rect", None);
+        let character_data = CollisionObjectData::new("character", Some(Vector2::new(32.0, 12.0)));
 
         // TODO: We should get the size from settings somewhere and then just divide it by 2.
         let margin = 2.0;
@@ -197,16 +184,6 @@ impl PhysicsSystem {
             character_half_extent_width,
             character_half_extent_height,
         )));
-        /*        let character = ShapeHandle::new(Compound::new(vec![*/
-        //(
-        //Isometry2::new(Vector2::new(32.0, 12.0), nalgebra::zero()),
-        //ShapeHandle::new(Ball::new(0.5f32)),
-        //),
-        //(
-        //Isometry2::new(Vector2::new(32.0, 12.0), nalgebra::zero()),
-        //ShapeHandle::new(Ball::new(0.5f32)),
-        //),
-        /*]));*/
 
         let character_position: Option<Isometry2<f32>> =
             character_position.get(0).map(|opt| opt.to_owned());
@@ -230,7 +207,7 @@ impl PhysicsSystem {
                     rect.clone(),
                     others_groups,
                     contacts_query,
-                    rect_data_purple.clone(),
+                    rect_data.clone(),
                 );
             });
             handle
@@ -271,7 +248,7 @@ impl PhysicsSystem {
     pub fn update_collision<'a, 'b>(
         position: &Position,
         collision_world: &mut Collision,
-    ) -> Vec<ProximityData> {
+    ) -> Vec<ContactData> {
         let collision = collision_world.set_character_position(position);
         let events = collision
             .character_handle
@@ -279,12 +256,12 @@ impl PhysicsSystem {
                 collision.character_position.map(|character_position| {
                     if let Some(ref mut world) = collision.world {
                         world.set_position(character_handle, character_position);
-                        //println!("LEN {:?}", world.proximity_events().iter().len());
+
                         // Poll and handle events.
                         let events = world
                             .contact_events()
                             .iter()
-                            .map(|event| Self::handle_proximity_event(&world, event))
+                            .map(|event| Self::handle_contact_event(&world, event))
                             .collect::<Vec<_>>();
 
                         // Submit the position update to the world.
@@ -299,74 +276,16 @@ impl PhysicsSystem {
 
         events
     }
-
-    pub fn get_start_moving_state() -> Vec<MovingState> {
-        vec![
-            MovingState::Left,
-            MovingState::Right,
-            MovingState::Top,
-            MovingState::Bottom,
-        ]
-    }
-
-    pub fn calculate_moving_state(
-        block_position: &Matrix<
-            f32,
-            nalgebra::U2,
-            nalgebra::U1,
-            nalgebra::MatrixArray<f32, nalgebra::U2, nalgebra::U1>,
-        >,
-        character_position: &Position,
-    ) -> Vec<MovingState> {
-        //if let Some(position) = collision.character_position {
-        let character_x = character_position.0.x;
-        let character_y = character_position.0.y;
-        //let half_size = 35.;
-
-        //if let Some(collision_pos) = collision.position {
-        let collision_x = block_position.x;
-        let collision_y = block_position.y;
-        /*        println!("char X {:?}", character_x);*/
-        //println!("char Y {:?}", character_y);
-        //println!("Col X {:?}", collision_x);
-        /*println!("Col Y {:?}", collision_y);*/
-
-        let object_width = block_position.x + 25.;
-        let object_height = block_position.y + 25.;
-        let character_width = 12.;
-        let character_height = 12.;
-
-        if character_x <= object_width && character_y >= object_height {
-            //println!("BOTTOM");
-            vec![MovingState::Right, MovingState::Left, MovingState::Bottom]
-        } else if character_x >= object_width && character_y <= object_height {
-            //println!("TOP");
-            vec![MovingState::Right, MovingState::Left, MovingState::Top]
-        } else if character_x <= object_width && character_y <= object_height {
-            //println!("LEFT");
-            vec![MovingState::Left, MovingState::Top, MovingState::Bottom]
-        } else if character_x >= object_width && character_y >= object_height {
-            //println!("RIGHT");
-            vec![MovingState::Right, MovingState::Top, MovingState::Bottom]
-        } else {
-            vec![]
-        }
-    }
 }
 
-pub struct PhysicsSystem {
-    pub collision_world: Option<Collision>,
-    pub x: bool,
-}
+pub struct PhysicsSystem;
 
 impl Component for CollisionHandle {
     type Storage = VecStorage<Self>;
 }
 
-//#[derive(Debug)]
-//pub struct CollisionHandle(CollisionObjectHandle);
 pub struct CollisionHandle {
-    pub collision_data: ProximityData,
+    pub collision_data: ContactData,
     pub character_entity: specs::Entity,
 }
 
@@ -378,7 +297,6 @@ impl<'a> System<'a> for PhysicsSystem {
         ReadStorage<'a, Velocity>,
         ReadStorage<'a, Character>,
         WriteStorage<'a, Position>,
-        //WriteStorage<'a, CollisionObjectData>,
         WriteStorage<'a, CollisionHandle>,
         Read<'a, LazyUpdate>,
     );
@@ -391,29 +309,20 @@ impl<'a> System<'a> for PhysicsSystem {
             velocity_storage,
             character_storage,
             mut position_storage,
-            mut collision_object_data_storage,
+            _,
             updater,
         ) = data;
-        //println!("delta {:?}", delta.0);
-
-        //let delta = delta.0;
-
-        //println!("Got physics world? {:?}", self.collision_world.is_some());
-
         (&entities, &velocity_storage, &mut position_storage)
             .join()
             .for_each(|(entity, velocity, position)| {
-                //println!("Character phsycis {:?}", position);
-                /*if let Some(_) = collision_object_data_storage.get(entity) {*/
-                //println!("Got collision");
-                /*} else {*/
                 position.0.x += velocity.x * delta.0;
                 position.0.y += velocity.y * delta.0;
-                //}
-                if let Some(character) = character_storage.get(entity) {
+
+                if let Some(_character) = character_storage.get(entity) {
                     let collision_events = Self::update_collision(position, &mut collision_world);
+
                     collision_events.into_iter().for_each(|event| {
-                        match event.proximity_event {
+                        match event.contact_event {
                             ContactEvent::Started(_, _) => {
                                 let collision_entity = entities.create();
                                 println!("Creating collision object");
@@ -427,44 +336,10 @@ impl<'a> System<'a> for PhysicsSystem {
                             }
                             _ => {}
                         };
-                        //println!("Got event {:?}", event.0);
                     });
                 }
             });
     }
-
-    //fn setup(&mut self, res: &mut Resources) {
-    //use specs::prelude::SystemData;
-
-    //Self::SystemData::setup(res);
-    //let mut r: Write<Collision> = Write::fetch(&*res);
-
-    //let velo: ReadStorage<Velocity> = ReadStorage::fetch(&*res);
-    //let pos: ReadStorage<Position> = ReadStorage::fetch(&*res);
-    //let character: ReadStorage<Character> = ReadStorage::fetch(&*res);
-    //if let Some(ref mut c_world) = r.world {
-    //PhysicsSystem::setup_handles(c_world, &velo, &pos, &character);
-    //}
-    /*}*/
-
-    //fn setup(&mut self, res: &mut specs::Resources) {
-    //println!("SELF {}", self.);
-    //if let None = self.collision_world {
-    //let world =
-    //Self::init_collisions(&velocity_storage, &position_storage, &character_storage);
-    //self.collision_world = Some(world);
-    //}
-    /*}*/
-
-    //fn setup(&mut self, res: &mut Resources) {
-    //use specs::prelude::SystemData;
-    //Self::SystemData::setup(res);
-    //let velo: ReadStorage<Velocity> = ReadStorage::fetch(&*res);
-    //let pos: ReadStorage<Position> = ReadStorage::fetch(&*res);
-    //let character: ReadStorage<Character> = ReadStorage::fetch(&*res);
-    //let world = self.init_collision_world();
-    //self.collision_world = Some(world);
-    /*}*/
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
