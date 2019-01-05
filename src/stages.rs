@@ -26,9 +26,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 50.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 50.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -44,9 +42,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 100.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 100.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -62,9 +58,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 150.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 150.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -80,9 +74,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 200.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 200.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -98,9 +90,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 250.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 250.0 }),
                         },
                     ],
                 },
@@ -122,9 +112,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 150.0, y: 150.0 },
-                            },
+                            position: Position(Vector { x: 150.0, y: 150.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -140,9 +128,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 150.0, y: 100.0 },
-                            },
+                            position: Position(Vector { x: 150.0, y: 100.0 }),
                         },
                     ],
                 },
@@ -169,9 +155,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 50.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 50.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -187,9 +171,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 100.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 100.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -205,9 +187,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 150.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 150.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -223,9 +203,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 200.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 200.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -241,9 +219,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 50.0, y: 250.0 },
-                            },
+                            position: Position(Vector { x: 50.0, y: 250.0 }),
                         },
                     ],
                 },
@@ -265,9 +241,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 150.0, y: 150.0 },
-                            },
+                            position: Position(Vector { x: 150.0, y: 150.0 }),
                         },
                         BlockAndPosition {
                             block: Block {
@@ -283,9 +257,7 @@ pub fn get_stages() -> Vec<Stage> {
                                     a: 1.0,
                                 },
                             },
-                            position: Position {
-                                position: Vector { x: 150.0, y: 100.0 },
-                            },
+                            position: Position(Vector { x: 150.0, y: 100.0 }),
                         },
                     ],
                 },

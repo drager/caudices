@@ -1,13 +1,74 @@
 use quicksilver::graphics::Color;
 use serde_json;
-use specs::prelude::Resources;
 use specs::{
-    Component, Entities, HashMapStorage, Join, LazyUpdate, Read, ReadStorage, System, VecStorage,
+    World,
+    Builder,
+    prelude::Resources,
+    Component, Entities, HashMapStorage, LazyUpdate, Read, ReadStorage, System, VecStorage,
     WriteStorage,
 };
 use utils::de_color;
 use Position;
 use ScreenState;
+use WINDOW_WIDTH;
+use WINDOW_HEIGHT;
+use Settings;
+
+fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
+    stages
+        .into_iter()
+        .find(|stage| stage.stage == state.current_stage)
+        .and_then(|stage| {
+            stage
+                .maps
+                .into_iter()
+                .find(|map| map.level == state.current_level)
+        })
+}
+
+fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<(), ()> {
+    for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
+        // The top.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (width_index + 1) as f32 * 50.,
+                settings.header_height,
+            ))
+            .build();
+        // The bottom.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (width_index + 1) as f32 * 50.,
+                (WINDOW_HEIGHT as u16 - 50).into(),
+            ))
+            .build();
+    }
+
+    for height_index in 2..=(WINDOW_HEIGHT / 50) - 2 {
+        // Left side.
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(50., (height_index + 1) as f32 * 50.))
+            .build();
+
+        // Right side
+        world
+            .create_entity()
+            .with(Block::default())
+            .with(Position::new(
+                (WINDOW_WIDTH as u16 - 50).into(),
+                (height_index + 1) as f32 * 50.,
+            ))
+            .build();
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Size {
@@ -61,13 +122,7 @@ impl<'a> System<'a> for BlockSystem {
         Read<'a, LazyUpdate>,
     );
 
-    fn run(&mut self, (entities, mut blocks, positions, _updater): Self::SystemData) {
-        (&entities, &mut blocks, &positions)
-            .join()
-            .for_each(|(_entity, _blocks, _position)| {
-                //let _block = entities.create();
-            });
-    }
+    fn run(&mut self, (_entities, _blocks, _positions, _updater): Self::SystemData) {}
 }
 
 impl Component for Stage {
