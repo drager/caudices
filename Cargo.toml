@@ -8,7 +8,6 @@ cfg-if = "0.1.6"
 console_error_panic_hook = "0.1.5"
 futures = "0.1.25"
 hibitset = "0.5.3"
-nalgebra = "0.16.10"
 ncollide2d = "0.17.1"
 serde = "1.0.80"
 serde_derive = "1.0.80"
@@ -24,3 +23,7 @@ version = "0.3.2"
 [dependencies.specs]
 default-features = false
 version = "0.14.0"
+
+[dependencies.nalgebra]
+features = ["serde-serialize"]
+version = "0.16.10"

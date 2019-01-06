@@ -1,10 +1,13 @@
 use character::Character;
 use collision::{Collision, CollisionObjectData};
 use nalgebra::{Isometry2, Vector2};
-use ncollide2d::events::ContactEvent;
-use ncollide2d::shape::{Cuboid, ShapeHandle};
-use ncollide2d::world::{CollisionGroups, CollisionObject, CollisionWorld, GeometricQueryType};
-use quicksilver::geom::Vector;
+use ncollide2d::{
+    events::ContactEvent,
+    shape::{Cuboid, ShapeHandle},
+    world::{
+        CollisionGroups, CollisionObject, CollisionObjectHandle, CollisionWorld, GeometricQueryType,
+    },
+};
 use specs::{
     Component, Entities, Join, LazyUpdate, Read, ReadStorage, System, VecStorage, Write,
     WriteStorage,
@@ -21,7 +24,6 @@ pub type CollisionNormal = nalgebra::Unit<
 
 pub struct ContactData {
     pub contact_event: ContactEvent,
-    pub collision_object: CollisionObject<f32, CollisionObjectData>,
     pub collision_normals: Vec<CollisionNormal>,
 }
 
@@ -33,7 +35,7 @@ pub enum MovingState {
     Bottom,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct DeltaTime(pub f32);
 
 impl PhysicsSystem {
@@ -51,68 +53,62 @@ impl PhysicsSystem {
         collision_world: &'a CollisionWorld<f32, CollisionObjectData>,
         event: &'a ContactEvent,
     ) -> ContactData {
-        let (first_collision_object, second_collision_object) = match event {
-            ContactEvent::Started(first_collision_object, second_collision_object) => (
-                collision_world
-                    .collision_object(*first_collision_object)
-                    .unwrap(),
-                collision_world
-                    .collision_object(*second_collision_object)
-                    .unwrap(),
+        let get_collision_object = |collision_object_handle: &CollisionObjectHandle| -> Option<&CollisionObject<f32, CollisionObjectData>> {
+            collision_world.collision_object(*collision_object_handle)
+        };
+
+        let (character_collision_object, second_collision_object) = match event {
+            ContactEvent::Started(character_collision_object, second_collision_object) => (
+                get_collision_object(character_collision_object),
+                get_collision_object(second_collision_object),
             ),
-            ContactEvent::Stopped(first_collision_object, second_collision_object) => (
-                collision_world
-                    .collision_object(*first_collision_object)
-                    .unwrap(),
-                collision_world
-                    .collision_object(*second_collision_object)
-                    .unwrap(),
+            ContactEvent::Stopped(character_collision_object, second_collision_object) => (
+                get_collision_object(character_collision_object),
+                get_collision_object(second_collision_object),
             ),
         };
 
-        // TODO: This shouldn't be needed to do. A reference should be able to be returned.
-        let second_collision_object_clone = CollisionObject::new(
-            second_collision_object.handle(),
-            second_collision_object.proxy_handle(),
-            second_collision_object.position().clone(),
-            second_collision_object.shape().clone(),
-            second_collision_object.collision_groups().clone(),
-            second_collision_object.query_type(),
-            second_collision_object.data().clone(),
-        );
+        let collision_normals = character_collision_object
+            .and_then(|character_collision_object| {
+                second_collision_object.map(|second_collision_object| {
+                    let mut collector = vec![];
+                    collision_world
+                        .contact_pair(
+                            character_collision_object.handle(),
+                            second_collision_object.handle(),
+                        )
+                        .map(|contact_manifold_generator| {
+                            contact_manifold_generator.contacts(&mut collector)
+                        });
 
-        let mut collector = vec![];
-        collision_world
-            .contact_pair(
-                first_collision_object.handle(),
-                second_collision_object.handle(),
-            )
-            .map(|contact_manifold_generator| contact_manifold_generator.contacts(&mut collector));
+                    collector
+                        .iter()
+                        .map(|contact_manifold| {
+                            let deepest_contact = contact_manifold.deepest_contact().unwrap();
+                            let contact_normal = character_collision_object.position().inverse()
+                                * deepest_contact.contact.normal;
+                            let feature_1 = deepest_contact.kinematic.feature1();
 
-        let collision_normals = collector
-            .iter()
-            .map(|contact_manifold| {
-                let deepest_contact = contact_manifold.deepest_contact().unwrap();
-                let contact_normal =
-                    first_collision_object.position().inverse() * deepest_contact.contact.normal;
-                let feature_1 = deepest_contact.kinematic.feature1();
+                            println!("Normal {:?}", contact_normal);
+                            println!("Feature 1 {:?}", feature_1);
+                            println!("depth {:?}", deepest_contact.contact.depth);
+                            println!("Feature 2 {:?}", deepest_contact.kinematic.feature2());
+                            println!("pos in handle {:?}", character_collision_object.position());
 
-                println!("Normal {:?}", contact_normal);
-                println!("Feature 1 {:?}", feature_1);
-                println!("depth {:?}", deepest_contact.contact.depth);
-                println!("Feature 2 {:?}", deepest_contact.kinematic.feature2());
-                println!("pos in handle {:?}", first_collision_object.position());
+                            let _co1_pos = character_collision_object.position().translation.vector;
+                            let _co2_pos = second_collision_object.position().translation.vector;
+                            println!("Character position: {:?}", _co1_pos);
+                            println!("Box position: {:?}", _co2_pos);
 
-                let _co1_pos = first_collision_object.position().translation.vector;
-                let _co2_pos = second_collision_object.position().translation.vector;
-
-                contact_normal
+                            contact_normal
+                        })
+                        .collect::<Vec<CollisionNormal>>()
+                })
             })
-            .collect::<Vec<CollisionNormal>>();
+            .unwrap_or_else(|| vec![]);
 
         ContactData {
             contact_event: *event,
-            collision_object: second_collision_object_clone,
             collision_normals,
         }
     }
@@ -128,12 +124,8 @@ impl PhysicsSystem {
             .join()
             .map(|(entity, position)| {
                 if let None = character_storage.get(entity) {
-                    let position = position.0;
                     println!("BLOCK POS {:?}", position);
-                    Some(Isometry2::new(
-                        Vector2::new(position.x, position.y),
-                        nalgebra::zero(),
-                    ))
+                    Some(Isometry2::new(position.0, nalgebra::zero()))
                 } else {
                     None
                 }
@@ -312,11 +304,12 @@ impl<'a> System<'a> for PhysicsSystem {
             _,
             updater,
         ) = data;
+
         (&entities, &velocity_storage, &mut position_storage)
             .join()
             .for_each(|(entity, velocity, position)| {
-                position.0.x += velocity.x * delta.0;
-                position.0.y += velocity.y * delta.0;
+                position.0.x += velocity.0.x * delta.0;
+                position.0.y += velocity.0.y * delta.0;
 
                 if let Some(_character) = character_storage.get(entity) {
                     let collision_events = Self::update_collision(position, &mut collision_world);
@@ -324,6 +317,8 @@ impl<'a> System<'a> for PhysicsSystem {
                     collision_events.into_iter().for_each(|event| {
                         match event.contact_event {
                             ContactEvent::Started(_, _) => {
+                                println!("Velocity: {:?}", velocity);
+                                println!("Delta: {:?}", delta.0);
                                 let collision_entity = entities.create();
                                 println!("Creating collision object");
                                 updater.insert(
@@ -343,23 +338,14 @@ impl<'a> System<'a> for PhysicsSystem {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Position(pub Vector);
-
-impl Position {
-    pub fn new(x: f32, y: f32) -> Self {
-        Position(Vector::new(x, y))
-    }
-}
+pub struct Position(pub Vector2<f32>);
 
 impl Component for Position {
     type Storage = VecStorage<Self>;
 }
 
 #[derive(Debug)]
-pub struct Velocity {
-    pub x: f32,
-    pub y: f32,
-}
+pub struct Velocity(pub Vector2<f32>);
 
 impl Component for Velocity {
     type Storage = VecStorage<Self>;

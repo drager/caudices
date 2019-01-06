@@ -1,9 +1,7 @@
-use super::{Position};
+use super::Position;
 use character::Character;
 use nalgebra::{Isometry2, Vector2};
-use ncollide2d::world::{
-    CollisionObjectHandle, CollisionWorld,
-};
+use ncollide2d::world::{CollisionObjectHandle, CollisionWorld};
 use physics::{CollisionHandle, CollisionNormal, MovingState, PhysicsSystem, Velocity};
 use specs::{
     Component, Entities, Join, LazyUpdate, Read, ReadStorage, System, VecStorage, Write,
@@ -35,10 +33,10 @@ pub fn moving_state_from_collision_normal(
 
 pub fn change_velocity(moving_state: &MovingState, velocity: &mut Velocity) {
     match moving_state {
-        MovingState::Left => velocity.x = velocity.x.max(0.),
-        MovingState::Right => velocity.x = velocity.x.min(0.),
-        MovingState::Top => velocity.y = velocity.y.max(0.),
-        MovingState::Bottom => velocity.y = velocity.y.min(0.),
+        MovingState::Left => velocity.0.x = velocity.0.x.max(0.),
+        MovingState::Right => velocity.0.x = velocity.0.x.min(0.),
+        MovingState::Top => velocity.0.y = velocity.0.y.max(0.),
+        MovingState::Bottom => velocity.0.y = velocity.0.y.min(0.),
     }
 }
 
@@ -73,13 +71,6 @@ impl<'a> System<'a> for CollisionSystem {
                 let character_entity = collision_data.character_entity;
                 if let Some(_character_position) = position_storage.get(character_entity) {
                     if let Some(ref mut velocity) = velocity_storage.get_mut(character_entity) {
-                        let _block_position = collision_data
-                            .collision_data
-                            .collision_object
-                            .position()
-                            .translation
-                            .vector;
-
                         let collision_normals = &collision_data.collision_data.collision_normals;
 
                         collision_normals
@@ -126,10 +117,7 @@ pub struct CollisionObjectData {
 }
 
 impl CollisionObjectData {
-    pub fn new(
-        name: &'static str,
-        velocity: Option<Vector2<f32>>,
-    ) -> CollisionObjectData {
+    pub fn new(name: &'static str, velocity: Option<Vector2<f32>>) -> CollisionObjectData {
         let init_velocity = if let Some(velocity) = velocity {
             Some(velocity)
         } else {

@@ -30,6 +30,7 @@ use futures::future;
 use physics::{DeltaTime, PhysicsSystem, Position, Velocity};
 //use log::log;
 use map::{Block, BlockSystem, Map, Stage, StageCreator};
+use nalgebra::Vector2;
 use quicksilver::{
     geom::{Rectangle, Shape, Vector},
     graphics::{Animation, Background::Img, Color, Font, FontStyle, Image},
@@ -225,27 +226,27 @@ impl<'a> Screen<'a> {
                 ButtonState::NotPressed => {}
             };
 
-        let velocity_change = 0.1;
+        let velocity_change = 35.;
 
         key_match(
             Key::Up,
-            Box::new(move |velocity| velocity.y = -velocity_change),
-            Box::new(|velocity| velocity.y = velocity.y.max(0.)),
+            Box::new(move |velocity| velocity.0.y = -velocity_change),
+            Box::new(|velocity| velocity.0.y = velocity.0.y.max(0.)),
         );
         key_match(
             Key::Down,
-            Box::new(move |velocity| velocity.y = velocity_change),
-            Box::new(|velocity| velocity.y = velocity.y.min(0.)),
+            Box::new(move |velocity| velocity.0.y = velocity_change),
+            Box::new(|velocity| velocity.0.y = velocity.0.y.min(0.)),
         );
         key_match(
             Key::Left,
-            Box::new(move |velocity| velocity.x = -velocity_change),
-            Box::new(|velocity| velocity.x = velocity.x.max(0.)),
+            Box::new(move |velocity| velocity.0.x = -velocity_change),
+            Box::new(|velocity| velocity.0.x = velocity.0.x.max(0.)),
         );
         key_match(
             Key::Right,
-            Box::new(move |velocity| velocity.x = velocity_change),
-            Box::new(|velocity| velocity.x = velocity.x.min(0.)),
+            Box::new(move |velocity| velocity.0.x = velocity_change),
+            Box::new(|velocity| velocity.0.x = velocity.0.x.min(0.)),
         );
     }
 
@@ -296,70 +297,18 @@ struct GameAsset {
 }
 
 #[derive(Debug)]
-struct Settings {
+pub struct Settings {
     animation_positions: Vec<CharacterPosition>,
     mali_font_path: String,
     character_sprites_path: String,
     block_asset_path: String,
     stages_json_path: String,
     header_height: f32,
+    block_size: BlockSize,
 }
 
-fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
-    stages
-        .into_iter()
-        .find(|stage| stage.stage == state.current_stage)
-        .and_then(|stage| {
-            stage
-                .maps
-                .into_iter()
-                .find(|map| map.level == state.current_level)
-        })
-}
-
-fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<()> {
-    for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
-        // The top.
-        world
-            .create_entity()
-            .with(Block::default())
-            .with(Position::new(
-                (width_index + 1) as f32 * 50.,
-                settings.header_height,
-            ))
-            .build();
-        // The bottom.
-        world
-            .create_entity()
-            .with(Block::default())
-            .with(Position::new(
-                (width_index + 1) as f32 * 50.,
-                (WINDOW_HEIGHT as u16 - 50).into(),
-            ))
-            .build();
-    }
-
-    for height_index in 2..=(WINDOW_HEIGHT / 50) - 2 {
-        // Left side.
-        world
-            .create_entity()
-            .with(Block::default())
-            .with(Position::new(50., (height_index + 1) as f32 * 50.))
-            .build();
-
-        // Right side
-        world
-            .create_entity()
-            .with(Block::default())
-            .with(Position::new(
-                (WINDOW_WIDTH as u16 - 50).into(),
-                (height_index + 1) as f32 * 50.,
-            ))
-            .build();
-    }
-
-    Ok(())
-}
+#[derive(Debug)]
+pub struct BlockSize(pub Vector2<f32>);
 
 impl State for Screen<'static> {
     fn new() -> Result<Self> {
@@ -377,13 +326,14 @@ impl State for Screen<'static> {
             block_asset_path: "50x50.png".to_owned(),
             stages_json_path: "stages.json".to_owned(),
             header_height: 100.,
+            block_size: BlockSize(Vector2::new(25., 25.)),
         };
 
         let mut world = World::new();
 
         let collisions = PhysicsSystem::init_collision_world();
 
-        world.add_resource(DeltaTime(10.0));
+        world.add_resource(DeltaTime(1. / 60.));
         world.add_resource(collisions);
 
         let mut dispatcher: Dispatcher = DispatcherBuilder::new()
@@ -397,24 +347,24 @@ impl State for Screen<'static> {
 
         world
             .create_entity()
-            .with(Velocity { x: 0., y: 0. })
-            .with(Position::new(130., 330.))
+            .with(Velocity(Vector2::new(0., 0.)))
+            .with(Position(Vector2::new(130., 330.)))
             .with(Character::default())
             .build();
 
         world
             .create_entity()
-            .with(Position::new(150., 150.))
+            .with(Position(Vector2::new(150., 150.)))
             .with(Block::default())
             .build();
 
         world
             .create_entity()
-            .with(Position::new(150., 200.))
+            .with(Position(Vector2::new(150., 200.)))
             .with(Block::default())
             .build();
 
-        //create_base_map_entities(&mut world, &settings)?;
+        //map::create_base_map_entities(&mut world, &settings)?;
 
         dispatcher.dispatch(&world.res);
 
@@ -452,6 +402,11 @@ impl State for Screen<'static> {
     }
 
     fn update(&mut self, window: &mut Window) -> Result<()> {
+        const DESIRED_FPS: u32 = 60;
+        let seconds = 1.0 / (DESIRED_FPS as f32);
+        //println!("Seconds {:?}", seconds);
+
+        //println!("{:?}", &format!("Fps: {}", window.average_fps()));
         self.time_elapsed += Duration::from_millis(10);
         self.world.maintain();
         self.dispatcher.dispatch(&self.world.res);
@@ -530,10 +485,6 @@ impl State for Screen<'static> {
             /*});*/
         }
 
-        /*if let None = self.collision_world {*/
-        //self.collision_world = Some(Collision::new(&world));
-        /*}*/
-
         let mut active_rendering = |entity: specs::Entity,
                                     window: &mut Window,
                                     block_asset: &mut Asset<Image>,
@@ -541,14 +492,15 @@ impl State for Screen<'static> {
          -> Result<()> {
             if let Some(position) = positions.get(entity) {
                 if let Some(_character) = characters.get(entity) {
-                    /*                    block_asset.execute(|image| {*/
-                    //window.draw(&image.area().with_center(position.0), Img(&image));
-                    //Ok(())
-                    /*});*/
-                    character_asset.execute(|character_image| {
-                        Screen::draw_character(window, position, character_image)?;
+                    block_asset.execute(|image| {
+                        //println!("POS RENDERING {:?}", position);
+                        window.draw(&image.area().with_center(position.0), Img(&image));
                         Ok(())
-                    })?;
+                    });
+                    /*character_asset.execute(|character_image| {*/
+                    //Screen::draw_character(window, position, character_image)?;
+                    //Ok(())
+                    /*})?;*/
                 }
             }
 

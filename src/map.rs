@@ -1,20 +1,18 @@
+use nalgebra::Vector2;
 use quicksilver::graphics::Color;
 use serde_json;
 use specs::{
-    World,
-    Builder,
-    prelude::Resources,
-    Component, Entities, HashMapStorage, LazyUpdate, Read, ReadStorage, System, VecStorage,
-    WriteStorage,
+    prelude::Resources, Builder, Component, Entities, HashMapStorage, LazyUpdate, Read,
+    ReadStorage, System, VecStorage, World, WriteStorage,
 };
 use utils::de_color;
 use Position;
 use ScreenState;
-use WINDOW_WIDTH;
-use WINDOW_HEIGHT;
 use Settings;
+use WINDOW_HEIGHT;
+use WINDOW_WIDTH;
 
-fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
+pub fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
     stages
         .into_iter()
         .find(|stage| stage.stage == state.current_stage)
@@ -26,25 +24,28 @@ fn find_current_map(stages: Vec<Stage>, state: &ScreenState) -> Option<Map> {
         })
 }
 
-fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<(), ()> {
+pub fn create_base_map_entities(
+    world: &mut World,
+    settings: &Settings,
+) -> Result<(), quicksilver::Error> {
     for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
         // The top.
         world
             .create_entity()
             .with(Block::default())
-            .with(Position::new(
+            .with(Position(Vector2::new(
                 (width_index + 1) as f32 * 50.,
                 settings.header_height,
-            ))
+            )))
             .build();
         // The bottom.
         world
             .create_entity()
             .with(Block::default())
-            .with(Position::new(
+            .with(Position(Vector2::new(
                 (width_index + 1) as f32 * 50.,
                 (WINDOW_HEIGHT as u16 - 50).into(),
-            ))
+            )))
             .build();
     }
 
@@ -53,21 +54,25 @@ fn create_base_map_entities(world: &mut World, settings: &Settings) -> Result<()
         world
             .create_entity()
             .with(Block::default())
-            .with(Position::new(50., (height_index + 1) as f32 * 50.))
+            .with(Position(Vector2::new(50., (height_index + 1) as f32 * 50.)))
             .build();
 
         // Right side
         world
             .create_entity()
             .with(Block::default())
-            .with(Position::new(
+            .with(Position(Vector2::new(
                 (WINDOW_WIDTH as u16 - 50).into(),
                 (height_index + 1) as f32 * 50.,
-            ))
+            )))
             .build();
     }
 
     Ok(())
+}
+
+pub fn parse_json(json_slice: &[u8]) -> Result<Vec<Stage>, serde_json::error::Error> {
+    serde_json::from_slice::<Vec<Stage>>(json_slice)
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -145,10 +150,6 @@ impl<'a> System<'a> for StageCreator {
     }
 
     fn run(&mut self, (_entities, _stones, _screen_state, _updater): Self::SystemData) {}
-}
-
-pub fn parse_json(json_slice: &[u8]) -> Result<Vec<Stage>, serde_json::error::Error> {
-    serde_json::from_slice::<Vec<Stage>>(json_slice)
 }
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
