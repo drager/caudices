@@ -12,6 +12,7 @@ use specs::{
     Component, Entities, Join, LazyUpdate, Read, ReadStorage, System, VecStorage, Write,
     WriteStorage,
 };
+use Settings;
 
 pub type CollisionNormal = nalgebra::Unit<
     nalgebra::Matrix<
@@ -114,6 +115,7 @@ impl PhysicsSystem {
     }
 
     pub fn setup_handles<'a>(
+        settings: &Settings,
         entities: &Entities<'a>,
         collision: &'a mut Collision,
         velocity_storage: &ReadStorage<'a, Velocity>,
@@ -158,11 +160,10 @@ impl PhysicsSystem {
         let rect_data = CollisionObjectData::new("rect", None);
         let character_data = CollisionObjectData::new("character", Some(Vector2::new(32.0, 12.0)));
 
-        // TODO: We should get the size from settings somewhere and then just divide it by 2.
         let margin = 2.0;
-        let rect_half_extent = 25.0 - margin;
-        let character_half_extent_width = 25.0 - margin;
-        let character_half_extent_height = 25.0 - margin;
+        let rect_half_extent = settings.block_size.x - margin;
+        let character_half_extent_width = settings.character_size.x - margin;
+        let character_half_extent_height = settings.character_size.y - margin;
 
         let contacts_query = GeometricQueryType::Contacts(margin, 0.);
         let rect = ShapeHandle::new(Cuboid::new(Vector2::new(

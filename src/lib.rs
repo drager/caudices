@@ -43,6 +43,7 @@ use std::time::Duration;
 
 const WINDOW_WIDTH: u16 = 600;
 const WINDOW_HEIGHT: u16 = 600;
+const DESIRED_FPS: u32 = 60;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub enum GameState {
@@ -183,11 +184,13 @@ impl<'a> Screen<'a> {
     }
 
     fn handle_keys_to_change_velocity(
+        settings: &Settings,
         velocity: &mut Velocity,
         window: &mut Window,
         character_animation: &mut Animation,
         animation_positions: &Vec<CharacterPosition>,
     ) {
+        let velocity_change = settings.velocity_change;
         let mut animation_positions_iter = animation_positions.into_iter();
 
         let start_position = animation_positions_iter.find(|pos| match pos {
@@ -225,8 +228,6 @@ impl<'a> Screen<'a> {
                 }
                 ButtonState::NotPressed => {}
             };
-
-        let velocity_change = 35.;
 
         key_match(
             Key::Up,
@@ -304,7 +305,9 @@ pub struct Settings {
     block_asset_path: String,
     stages_json_path: String,
     header_height: f32,
-    block_size: BlockSize,
+    block_size: Vector2<f32>,
+    character_size: Vector2<f32>,
+    velocity_change: f32,
 }
 
 #[derive(Debug)]
@@ -326,7 +329,9 @@ impl State for Screen<'static> {
             block_asset_path: "50x50.png".to_owned(),
             stages_json_path: "stages.json".to_owned(),
             header_height: 100.,
-            block_size: BlockSize(Vector2::new(25., 25.)),
+            block_size: Vector2::new(25., 25.),
+            character_size: Vector2::new(25., 25.),
+            velocity_change: 55.0,
         };
 
         let mut world = World::new();
@@ -371,6 +376,7 @@ impl State for Screen<'static> {
         world.maintain();
 
         PhysicsSystem::setup_handles(
+            &settings,
             &world.entities(),
             &mut world.write_resource::<Collision>(),
             &world.read_storage::<Velocity>(),
@@ -402,7 +408,6 @@ impl State for Screen<'static> {
     }
 
     fn update(&mut self, window: &mut Window) -> Result<()> {
-        const DESIRED_FPS: u32 = 60;
         let seconds = 1.0 / (DESIRED_FPS as f32);
         //println!("Seconds {:?}", seconds);
 
@@ -411,6 +416,7 @@ impl State for Screen<'static> {
         self.world.maintain();
         self.dispatcher.dispatch(&self.world.res);
 
+        let settings = &self.settings;
         let mut screen_state = self.world.write_resource::<ScreenState>();
         let characters = self.world.read_storage::<Character>();
         let stages = self.world.read_storage::<Stage>();
@@ -438,6 +444,7 @@ impl State for Screen<'static> {
                 if let Some(velocity) = velocity_storage.get_mut(entity) {
                     let _ = character_asset.execute(|character_animation| {
                         Screen::handle_keys_to_change_velocity(
+                            &settings,
                             velocity,
                             window,
                             character_animation,
@@ -497,7 +504,7 @@ impl State for Screen<'static> {
                         window.draw(&image.area().with_center(position.0), Img(&image));
                         Ok(())
                     });
-                    /*character_asset.execute(|character_image| {*/
+                    /*                    character_asset.execute(|character_image| {*/
                     //Screen::draw_character(window, position, character_image)?;
                     //Ok(())
                     /*})?;*/
