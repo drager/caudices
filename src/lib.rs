@@ -13,12 +13,14 @@ extern crate serde_json;
 extern crate specs;
 extern crate time;
 
+#[macro_use]
+extern crate log;
+
 /*extern crate console_error_panic_hook;*/
 //pub use console_error_panic_hook::set_once as set_panic_hook;
 
 mod character;
 mod collision;
-mod log;
 pub mod map;
 mod physics;
 mod stages;
@@ -160,8 +162,8 @@ impl<'a> Screen<'a> {
         let tick_animation =
             |x: &f32, rectangle: &Rectangle, character_animation: &mut Animation| {
                 if x == &rectangle.pos.x {
+                    debug!("Ticking character animation: {} {:?}", x, rectangle);
                     character_animation.tick();
-                    //log("Animation ticking...");
                 }
             };
         match current_frame_area {
@@ -209,6 +211,8 @@ impl<'a> Screen<'a> {
              on_press: Box<Fn(&mut Velocity) -> ()>,
              on_release: Box<Fn(&mut Velocity) -> ()>| match window.keyboard()[key] {
                 ButtonState::Pressed | ButtonState::Held => {
+                    debug!("Key: {:?} pressed or held", key);
+
                     on_press(velocity);
                     Self::tick_character_animation(
                         &current_frame_area,
@@ -218,6 +222,8 @@ impl<'a> Screen<'a> {
                     );
                 }
                 ButtonState::Released => {
+                    debug!("Key: {:?} released", key);
+
                     on_release(velocity);
                     Self::tick_character_animation(
                         &current_frame_area,
@@ -252,6 +258,7 @@ impl<'a> Screen<'a> {
     }
 
     fn load_fonts(settings: &Settings) -> Asset<Font> {
+        info!("Loading fonts from path: {}", settings.mali_font_path);
         Asset::new(Font::load(settings.mali_font_path.to_owned()))
     }
 
@@ -260,6 +267,11 @@ impl<'a> Screen<'a> {
         settings: &Settings,
     ) -> Asset<Animation> {
         let frame_delay = 1;
+
+        info!(
+            "Loading character asset from path: {} with frame delay: {}",
+            settings.character_sprites_path, frame_delay
+        );
 
         let character_image =
             Image::load(settings.character_sprites_path.to_owned()).map(move |character_image| {
@@ -274,14 +286,21 @@ impl<'a> Screen<'a> {
     }
 
     fn load_block_asset(settings: &Settings) -> Asset<Image> {
+        info!(
+            "Loading block assets from path: {}",
+            settings.block_asset_path
+        );
         Asset::new(Image::load(settings.block_asset_path.to_owned()))
     }
 
     fn load_stages(settings: &Settings) -> Asset<Vec<Stage>> {
+        info!("Loading stages from path: {}", settings.stages_json_path);
+
         let stages_file =
             load_file(settings.stages_json_path.to_owned()).and_then(move |stages_bytes| {
                 let stages = map::parse_json(&stages_bytes);
-                future::result(stages.map_err(|_err| {
+                future::result(stages.map_err(|err| {
+                    error!("Failed to load json with error: {}", err);
                     quicksilver::Error::ContextError("Couldn't parse json.".to_owned())
                 }))
             });
@@ -333,6 +352,8 @@ impl State for Screen<'static> {
             character_size: Vector2::new(25., 25.),
             velocity_change: 55.0,
         };
+
+        debug!("Starting up with settings: {:?}", &settings);
 
         let mut world = World::new();
 

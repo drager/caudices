@@ -28,6 +28,8 @@ pub fn create_base_map_entities(
     world: &mut World,
     settings: &Settings,
 ) -> Result<(), quicksilver::Error> {
+    info!("Creating base map entities");
+
     for width_index in 0..=(WINDOW_WIDTH / 50) - 2 {
         // The top.
         world
